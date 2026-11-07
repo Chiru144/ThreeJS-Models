@@ -116,7 +116,7 @@ describe('single models', () => {
     });
   }
   test('unknown model gives a helpful error', async () => {
-    await assert.rejects(() => orch.model({ model: 'dragon' }), /Available:/);
+    await assert.rejects(() => orch.model({ model: 'flibbertigibbet' }), /Available:/);
   });
 });
 

@@ -26,7 +26,7 @@ describe('agents and sub-agents', () => {
 test('health() reports every agent healthy, including the e2e pipeline', async () => {
   const h = await orch.health();
   assert.equal(h.ok, true, JSON.stringify(h, null, 1));
-  assert.equal(h.summary.agents, 10);
+  assert.equal(h.summary.agents, 12);
   assert.equal(h.summary.subagentsOk, h.summary.subagents);
   assert.ok(h.pipeline.ok);
 });

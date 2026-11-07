@@ -1,9 +1,11 @@
 import { Agent, SubAgent, assert } from '../core/agent.js';
 import * as H from '../library/helpers.js';
-import { MODELS, modelDefaults } from '../library/models.js';
+import { MODELS, modelDefaults, sizeOf } from '../library/models.js';
+import { LOCOMOTION_SPEEDS } from './animation.js';
 import { THREE_VERSION, QUALITY } from '../library/presets.js';
 
-const HEX_KEYS = new Set(['color', 'emissive', 'specularColor', 'sheenColor', 'attenuationColor']);
+const HEX_KEYS = new Set(['color', 'emissive', 'specularColor', 'sheenColor', 'attenuationColor', 'skin', 'hairColor', 'eyeColor', 'top', 'bottom', 'shoes', 'accent', 'hatColor', 'cape',
+  'coat', 'belly', 'hornColor', 'nose', 'eye', 'headColor', 'tailTip', 'body', 'wing', 'head', 'beak', 'legs', 'fin', 'spotColor', 'stripeColor']);
 const hex = (n) => `0x${(n >>> 0).toString(16).padStart(6, '0')}`;
 const num = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 1e4) / 1e4));
 
@@ -22,7 +24,7 @@ const indent = (src, pad = '  ') => src.split('\n').map((l) => (l ? pad + l : l)
 const matExpr = (m) => (m ? `M('${m.key}', ${lit(m.props)}${m.type !== 'MeshStandardMaterial' ? `, '${m.type}'` : ''})` : 'undefined');
 
 function helperBlock(needs) {
-  const order = ['rng', 'heightAt', 'scatter', 'instanceize'];
+  const order = ['rng', 'heightAt', 'scatter', 'instanceize', 'mergeParts'];
   return order.filter((h) => needs.has(h)).map((h) => indent(H[h].toString())).join('\n');
 }
 
@@ -76,54 +78,103 @@ function emitModule(b) {
   if (anyAnim) {
     push('');
     push('  const anims = [];');
-    push('  const animate = (o, type, speed, amp, phase) => anims.push({ o, type, speed, amp, phase, y: o.position.y, s: o.scale.x, r: Math.hypot(o.position.x, o.position.z) || 4, a: Math.atan2(o.position.z, o.position.x) });');
+    const loco = animation.bindings.some((x) => LOCOMOTION_SPEEDS[x.type]);
+    if (loco) push(`  const LIN = ${lit(LOCOMOTION_SPEEDS)};`);
+    push(`  const animate = (o, type, speed, amp, phase${loco ? ', stride = 0.5, inPlace = false' : ''}) => {
+    const r = Math.hypot(o.position.x, o.position.z);
+    anims.push({ o, type, speed, amp, phase, y: o.position.y, s: o.scale.x, r: r || 4, a: Math.atan2(o.position.z, o.position.x), rig: (o.children[0] || o).userData.rig${loco ? `,
+      R: inPlace ? 0 : Math.max(r, stride * 2.5, 1.2), lin: (LIN[type] ?? 0) * Math.min(1.6, Math.max(0.2, stride * 2.2)), lift: Math.max(1.2, stride * 3)` : ''} });
+  };`);
   }
   const scattered = layout.items.some((i) => i.mode === 'scatter');
   if (scattered) push(`  const occupied = ${lit(layout.occupied)};`);
   push('  const place = (child, x, y, z, ry, s) => { const g = new THREE.Group(); g.add(child); g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(s); return g; };');
 
+  const attachedTo = (id) => spec.objects.filter((c) => c.attach?.to === id);
+  // Children (riders, companions) are emitted inside their parent's block so they inherit its motion.
+  const emitAttached = (parentVar, o, pad) => {
+    for (const c of attachedTo(o.id)) {
+      const cfn = factories.find((f) => f.model === c.model).fnName;
+      const ca = animById[c.id];
+      const cs = num(c.scale / (o.scale || 1));
+      push(`${pad}{ // ${c.id} ${c.attach.kind === 'rider' ? 'rides' : 'walks beside'} ${o.id}${c.sheet ? ` · ${c.sheet}` : ''}`);
+      push(`${pad}  const c = place(${cfn}(THREE, M, ${lit({ ...modelDefaults(c.model), ...c.params })}, ${matExpr(materials.byId[c.id])}), 0, 0, 0, 0, ${cs});`);
+      if (c.attach.kind === 'rider') {
+        push(`${pad}  const sd = ${parentVar}.children[0].userData.saddle;`);
+        push(`${pad}  c.position.set(0, sd.y - c.children[0].userData.hipY * ${cs} + 0.02, sd.z);`);
+        push(`${pad}  sd.node.add(c);`);
+      } else {
+        push(`${pad}  c.position.set(${num(-(sizeOf(o).footprint + sizeOf(c).footprint) / (o.scale || 1) - 0.1)}, 0, 0.15);`);
+        push(`${pad}  ${parentVar}.add(c);`);
+      }
+      push(`${pad}  c.name = '${c.id}';`);
+      if (ca) push(`${pad}  animate(c, '${ca.type}', ${num(ca.speed)}, 0, 0.4${LOCOMOTION_SPEEDS[ca.type] ? ', 0.5, true' : ''});`);
+      push(`${pad}}`);
+    }
+  };
+
   for (const o of spec.objects) {
+    if (o.attach) continue;
     const item = byId[o.id];
     const fn = factories.find((f) => f.model === o.model).fnName;
     const params = lit({ ...modelDefaults(o.model), ...o.params });
     const mat = matExpr(materials.byId[o.id]);
     const a = animById[o.id];
+    const variants = MODELS[o.model].variants && o.params.vary;
+    const stride = LOCOMOTION_SPEEDS[a?.type] ? `, ${num(Math.round(sizeOf(o).footprint * 100) / 100)}` : '';
+    const anim = (target, phase) => (a ? `animate(${target}, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, ${phase}${stride});` : '');
+    const P = (i) => (variants ? `{ ...p, variant: ${i} }` : 'p');
     push('');
-    push(`  // ${o.id} · ${o.model} ×${o.count}${o.instanced ? ' (instanced)' : ''}`);
+    push(`  // ${o.id} · ${o.model}${o.params.species ? ` (${o.params.species})` : o.params.archetype && o.params.archetype !== 'person' ? ` (${o.params.archetype})` : ''} ×${o.count}${o.instanced ? ' (instanced)' : ''}`);
+    if (o.sheet) push(`  // ${o.sheet}`);
     if (item.mode === 'backdrop' || item.mode === 'surface') {
       if (o.model === 'ground' && !env.autoGround) push(`  scene.add(${fn}(THREE, M, ${params}, ${mat}));`);
-      else if (item.mode === 'backdrop') push(`  { const o = ${fn}(THREE, M, ${params}, ${mat}); o.name = '${o.id}'; scene.add(o);${a ? ` animate(o, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, 0);` : ''} }`);
+      else if (item.mode === 'backdrop') push(`  { const o = ${fn}(THREE, M, ${params}, ${mat}); o.name = '${o.id}'; scene.add(o);${a ? ` ${anim('o', 0)}` : ''} }`);
       else push(`  { const o = ${fn}(THREE, M, ${params}, ${mat}); o.name = '${o.id}'; scene.add(o); }`);
       continue;
     }
+    push('  {');
+    push(`    const p = ${params};`);
     if (item.mode === 'row') {
       const [px, py, pz] = item.positions[0];
       const single = item.positions.length === 1;
-      push(single ? '  {' : `  ${lit(item.positions)}.forEach(([px, py, pz], i) => {`);
+      const pad = single ? '    ' : '      ';
+      if (!single) push(`    ${lit(item.positions)}.forEach(([px, py, pz], i) => {`);
       const X = single ? num(px) : 'px', Y = single ? num(py) : 'py', Z = single ? num(pz) : 'pz';
       const Yexpr = env.terrain.amp ? `heightAt(${X}, ${Z}) + ${Y}` : Y;
-      push(`    const o = place(${fn}(THREE, M, ${params}, ${mat}), ${X}, ${Yexpr}, ${Z}, ${num(o.rotationY)}, ${num(o.scale)});`);
-      push(single ? `    o.name = '${o.id}';` : `    o.name = '${o.id}_' + i;`);
-      push('    scene.add(o);');
-      if (a) push(`    animate(o, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, ${single ? 0 : 'i * 0.7'});`);
-      push(single ? '  }' : '  });');
+      push(`${pad}const o = place(${fn}(THREE, M, ${P(single ? 0 : 'i')}, ${mat}), ${X}, ${Yexpr}, ${Z}, ${num(o.rotationY)}, ${num(o.scale)});`);
+      push(single ? `${pad}o.name = '${o.id}';` : `${pad}o.name = '${o.id}_' + i;`);
+      push(`${pad}scene.add(o);`);
+      if (a) push(`${pad}${anim('o', single ? 0 : 'i * 0.7')}`);
+      if (single) emitAttached('o', o, pad);
+      if (!single) push('    });');
+      push('  }');
       continue;
     }
-    const s = item.scatter;
-    push('  {');
-    push(`    const pts = scatter(${s.count}, ${s.inner}, ${s.outer}, ${s.minDist}, ${s.seed}, occupied, ${s.yJitter});`);
+    const sc = item.scatter;
+    push(`    const pts = scatter(${sc.count}, ${sc.inner}, ${sc.outer}, ${sc.minDist}, ${sc.seed}, occupied, ${sc.yJitter})${o.scale === 1 ? '' : `.map(([x, y, z, ry, s]) => [x, y, z, ry, s * ${num(o.scale)}])`};`);
     if (o.instanced) {
       needs.add('instanceize');
-      push(`    const g = instanceize(${fn}(THREE, M, ${params}, ${mat}), ${o.scale === 1 ? 'pts' : `pts.map(([x, y, z, ry, s]) => [x, y, z, ry, s * ${num(o.scale)}])`});`);
-      push(`    g.name = '${o.id}';`);
-      push('    scene.add(g);');
-      if (a) push(`    animate(g, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, 0);`);
+      if (variants) {
+        // a few distinct looks, each instanced: variety without one draw call set per copy
+        push('    const V = Math.min(4, pts.length);');
+        push('    for (let v = 0; v < V; v++) {');
+        push(`      const g = instanceize(${fn}(THREE, M, ${P('v')}, ${mat}), pts.filter((_, i) => i % V === v));`);
+        push(`      g.name = '${o.id}_v' + v;`);
+        push('      scene.add(g);');
+        push('    }');
+      } else {
+        push(`    const g = instanceize(${fn}(THREE, M, p, ${mat}), pts);`);
+        push(`    g.name = '${o.id}';`);
+        push('    scene.add(g);');
+        if (a) push(`    ${anim('g', 0)}`);
+      }
     } else {
       push('    pts.forEach(([x, y, z, ry, s], i) => {');
-      push(`      const o = place(${fn}(THREE, M, ${params}, ${mat}), x, y, z, ry, s${o.scale === 1 ? '' : ` * ${num(o.scale)}`});`);
+      push(`      const o = place(${fn}(THREE, M, ${P('i')}, ${mat}), x, y, z, ry, s);`);
       push(`      o.name = '${o.id}_' + i;`);
       push('      scene.add(o);');
-      if (a) push(`      animate(o, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, i * 0.7);`);
+      if (a) push(`      ${anim('o', 'i * 0.7')}`);
       push('    });');
     }
     push('  }');
@@ -254,10 +305,12 @@ renderer.setAnimationLoop((time) => {
 }
 
 /** model.js: a single reusable model factory module. */
-function emitModel({ model, factory, material, params }) {
+function emitModel({ model, factory, material, params, sheet }) {
   const needs = new Set(factory.needs);
-  return `// ${model} — generated by threejs-forge-mcp for three.js r${THREE_VERSION.split('.')[1]}
-// import * as THREE from 'three'; scene.add(createModel(THREE, { /* params */ }));
+  const rig = MODELS[model].rigged ? `\n// Rigged: const m = createModel(THREE); each frame m.userData.rig(seconds, 'idle' | 'walk' | 'run' | ${model === 'human' ? "'wave' | 'dance'" : "'fly' | 'swim' | 'slither'"});` : '';
+  return `// ${model}${sheet ? ` — ${sheet}` : ''}
+// Generated by threejs-forge-mcp for three.js r${THREE_VERSION.split('.')[1]}
+// import * as THREE from 'three'; scene.add(createModel(THREE, { /* params */ }));${rig}
 // Params: ${Object.entries(MODELS[model].params).map(([k, v]) => `${k}=${v.default}`).join(', ')}
 export function createModel(THREE, params = {}) {
   const TERRAIN = { amp: 0, flats: [] };

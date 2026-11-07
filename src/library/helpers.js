@@ -74,3 +74,42 @@ export function heightAt(x, z) {
   const h = Math.sin(x * 0.08 + 1.3) * Math.cos(z * 0.07 + 0.4) + 0.5 * Math.sin(x * 0.17 + z * 0.13 + 2.1) + 0.25 * Math.cos(x * 0.31 - z * 0.27);
   return TERRAIN.amp * (h + 0.6) * k + dip;
 }
+
+export function mergeParts(root) {
+  // Merge sibling meshes that share a material inside each joint group. Joints stay
+  // separate (so rigs still animate) while draw calls drop from ~60 to ~15 per character.
+  const groups = [];
+  root.traverse((o) => { if (o.isGroup || o === root) groups.push(o); });
+  for (const g of groups) {
+    const buckets = new Map();
+    for (const c of g.children) {
+      if (!c.isMesh || c.isInstancedMesh || c.children.length || c.userData.keep) continue;
+      if (!buckets.has(c.material)) buckets.set(c.material, []);
+      buckets.get(c.material).push(c);
+    }
+    for (const [material, list] of buckets) {
+      if (list.length < 2) continue;
+      const pos = [], nor = [], idx = [];
+      let base = 0;
+      for (const m of list) {
+        m.updateMatrix();
+        const geo = m.geometry.clone().applyMatrix4(m.matrix);
+        const P = geo.attributes.position, N = geo.attributes.normal;
+        for (let i = 0; i < P.count; i++) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i)); }
+        if (geo.index) for (let i = 0; i < geo.index.count; i++) idx.push(geo.index.getX(i) + base);
+        else for (let i = 0; i < P.count; i++) idx.push(i + base);
+        base += P.count;
+        geo.dispose();
+        g.remove(m);
+      }
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      merged.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      merged.setIndex(idx);
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.userData = { ...list[0].userData };
+      g.add(mesh);
+    }
+  }
+  return root;
+}

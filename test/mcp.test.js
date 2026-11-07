@@ -26,9 +26,9 @@ const call = async (name, args = {}) => {
   return { ...r, text: r.content.map((c) => c.text).join('\n') };
 };
 
-test('lists the six forge tools with compact descriptions', async () => {
+test('lists the seven forge tools with compact descriptions', async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ['forge_build', 'forge_catalog', 'forge_health', 'forge_model', 'forge_plan', 'forge_review']);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ['forge_build', 'forge_catalog', 'forge_character', 'forge_health', 'forge_model', 'forge_plan', 'forge_review']);
   const size = JSON.stringify(tools).length;
   assert.ok(size < 9000, `tool definitions are ${size} chars; keep them lean (they sit in every prompt)`);
 });
@@ -36,7 +36,7 @@ test('lists the six forge tools with compact descriptions', async () => {
 test('forge_health: all agents and sub-agents healthy', async () => {
   const r = await call('forge_health');
   assert.ok(!r.isError, r.text);
-  assert.match(r.text, /10\/10 agents · (\d+)\/\1 sub-agents/);
+  assert.match(r.text, /12\/12 agents · (\d+)\/\1 sub-agents/);
 });
 
 test('forge_build writes files and returns a short summary (no code by default)', async () => {
@@ -69,8 +69,16 @@ test('forge_model, forge_review, forge_catalog', async () => {
   assert.ok(JSON.parse(c.text).lighting.includes('sunset'));
 });
 
+test('forge_character designs a person and writes a rigged model + preview', async () => {
+  const r = await call('forge_character', { description: 'an old wizard with a long white beard waving', out_dir: 'wizard' });
+  assert.ok(!r.isError, r.text);
+  assert.match(r.text, /sheet: wizard, elder male/);
+  await access(path.join(dir, 'wizard', 'model.js'));
+  await access(path.join(dir, 'wizard', 'index.html'));
+});
+
 test('bad input returns an MCP error result, not a crash', async () => {
-  const r = await call('forge_model', { model: 'dragon' });
+  const r = await call('forge_model', { model: 'flibbertigibbet' });
   assert.equal(r.isError, true);
   const again = await call('forge_catalog', { section: 'materials' });
   assert.ok(!again.isError);

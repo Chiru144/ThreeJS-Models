@@ -47,7 +47,7 @@ export function createServer(orchestrator = new Orchestrator()) {
 
   server.registerTool('forge_build', {
     title: 'Build Three.js scene',
-    description: 'Prompt or spec → validated three.js scene (index.html + reusable scene.js). Runs planner→material→optimizer→composer→modeler→animation→lighting→codegen→validator agents. Returns a short summary.',
+    description: 'Prompt or spec → validated three.js scene (index.html + reusable scene.js). People and animals are planned by the character/creature agents, then material→optimizer→composer→modeler→animation→lighting→codegen→validator. Returns a short summary.',
     inputSchema: {
       prompt: z.string().optional().describe('e.g. "a village at sunset with 3 red cars and floating crystals"'),
       spec: specSchema.optional().describe('Exact spec (overrides prompt). See forge_catalog section=spec'),
@@ -94,6 +94,29 @@ export function createServer(orchestrator = new Orchestrator()) {
     } catch (e) { return fail(e); }
   });
 
+  server.registerTool('forge_character', {
+    title: 'Design a character or creature',
+    description: 'Describe one person, animal or creature → character/creature agents plan anatomy, appearance, wardrobe or coat, and gait. Writes model.js (rigged createModel) + a studio preview. Returns the design sheet.',
+    inputSchema: {
+      description: z.string().describe('e.g. "an old wizard with a long white beard waving", "a black and white horse galloping", "a red dragon flying"'),
+      out_dir: z.string().optional(),
+      write_files: z.boolean().optional(),
+    },
+  }, async (args) => {
+    try {
+      const r = await o.run('character', args);
+      const s = r.build.validation.runtime?.stats;
+      const lines = [
+        `${r.ok ? '✔' : '✘'} ${r.subject.model}${r.others ? ` (+${r.others} other object(s) in the description ignored)` : ''}`,
+        `sheet: ${r.sheet}`,
+        r.build.written ? `files: ${r.build.written} → index.html (preview), scene.js, model.js` : '',
+        s ? `stats: ${s.drawCalls} draw calls · ${s.triangles} tris · rig modes checked` : '',
+        `params: ${json(r.subject.params)}`,
+      ];
+      return { ...text(lines.filter(Boolean).join('\n')), isError: !r.ok };
+    } catch (e) { return fail(e); }
+  });
+
   server.registerTool('forge_review', {
     title: 'Review three.js code',
     description: 'Static review of existing three.js code/HTML: removed APIs, per-frame allocations, shadows, colour space, resize, pixel ratio. Returns score + fixes.',
@@ -113,7 +136,7 @@ export function createServer(orchestrator = new Orchestrator()) {
   server.registerTool('forge_catalog', {
     title: 'Catalog',
     description: 'Lists models+params, materials, colours, lighting, animations, quality budgets, agents, or a spec example. Ask for one section to save tokens.',
-    inputSchema: { section: z.enum(['models', 'materials', 'colors', 'lighting', 'animations', 'quality', 'agents', 'spec', 'all']).optional() },
+    inputSchema: { section: z.enum(['models', 'characters', 'creatures', 'materials', 'colors', 'lighting', 'animations', 'quality', 'agents', 'spec', 'all']).optional() },
   }, async ({ section = 'models' }) => text(json(await o.run('catalog', { section }))));
 
   server.registerTool('forge_health', {

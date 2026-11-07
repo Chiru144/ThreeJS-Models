@@ -13,7 +13,7 @@ function emitFactory(name, kinds) {
     model: name,
     fnName: fnName(name),
     source,
-    needs: ['rng', 'heightAt'].filter((h) => new RegExp(`\\b${h}\\(`).test(source)),
+    needs: ['rng', 'heightAt', 'mergeParts'].filter((h) => new RegExp(`\\b${h}\\(`).test(source)),
   };
 }
 
@@ -31,6 +31,7 @@ const CATEGORY = {
   'procedural-modeler': { kinds: ['procedural'], sample: 'tree', description: 'Multi-part procedural models: tree, rock, house, car, robot, planet, furniture, lamp, crystal, mushroom.' },
   'parametric-modeler': { kinds: ['parametric'], sample: 'vase', description: 'Lathe/profile-based parametric models (vase).' },
   'environment-modeler': { kinds: ['surface', 'backdrop'], sample: 'stars', description: 'Ground, terrain height-field, water, starfield.' },
+  'rigged-modeler': { kinds: ['character', 'creature'], sample: 'human', description: 'Articulated, rigged factories for humans and creature body plans (planned by the character/creature agents).' },
 };
 
 export class ModelerAgent extends Agent {

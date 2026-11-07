@@ -5,6 +5,9 @@
 // Factories are real functions so they are syntax-checked and testable; codegen
 // copies them into the output with Function#toString.
 /* eslint-disable no-undef */
+import { HUMAN_FACTORY, ARCHETYPES, OUTFITS, HATS, PROPS, HAIR_STYLES, AGES, BUILDS } from './characters.js';
+import { CREATURE_FACTORIES, SPECIES } from './creatures.js';
+import { resolveColor } from './materials.js';
 
 function makeBox(THREE, M, p, main) {
   const s = p.size ?? 1;
@@ -272,7 +275,7 @@ export const MODELS = {
   sphere: { fn: makeSphere, kind: 'primitive', footprint: 0.8, height: 1.5, params: { radius: P(0.75, 0.05, 50), detail: P(32, 8, 128) }, aliases: ['ball', 'orb'] },
   cylinder: { fn: makeCylinder, kind: 'primitive', footprint: 0.6, height: 1.5, params: { radius: P(0.5, 0.05, 50), height: P(1.5, 0.1, 100) }, aliases: ['pillar', 'column'] },
   cone: { fn: makeCone, kind: 'primitive', footprint: 0.6, height: 1.5, params: { radius: P(0.6, 0.05, 50), height: P(1.5, 0.1, 100) }, aliases: ['pyramid'] },
-  torus: { fn: makeTorus, kind: 'primitive', footprint: 1, height: 1.9, params: { radius: P(0.7, 0.1, 50), tube: P(0.25, 0.02, 10) }, aliases: ['donut', 'ring'] },
+  torus: { fn: makeTorus, kind: 'primitive', footprint: 1, height: 1.9, params: { radius: P(0.7, 0.1, 50), tube: P(0.25, 0.02, 10) }, aliases: ['donut'] },
   torusKnot: { fn: makeTorusKnot, kind: 'primitive', footprint: 1, height: 2.1, params: { radius: P(0.7, 0.1, 50), tube: P(0.22, 0.02, 10), p: P(2, 1, 9), q: P(3, 1, 9) }, aliases: ['knot', 'torusknot', 'torus knot'] },
   capsule: { fn: makeCapsule, kind: 'primitive', footprint: 0.5, height: 1.8, params: { radius: P(0.4, 0.05, 20), length: P(1, 0, 50) }, aliases: ['pill'] },
   crystal: { fn: makeCrystal, kind: 'procedural', footprint: 0.4, height: 1.2, natural: true, params: { height: P(1.2, 0.1, 20) }, aliases: ['gem', 'diamond', 'shard'] },
@@ -291,7 +294,87 @@ export const MODELS = {
   water: { fn: makeWater, kind: 'surface', footprint: 0, height: 0, params: { size: P(20, 1, 1000) }, aliases: ['lake', 'pond', 'ocean', 'sea', 'pool'] },
   ground: { fn: makeGround, kind: 'surface', footprint: 0, height: 0, params: { size: P(60, 1, 5000) }, aliases: ['floor', 'plane'] },
   terrain: { fn: makeTerrain, kind: 'surface', footprint: 0, height: 0, params: { size: P(80, 4, 2000), segments: P(96, 4, 512), amp: P(1.5, 0, 100) }, aliases: ['hills', 'landscape', 'mountains', 'hill'] },
+  ...characterModels(),
+  ...creatureModels(),
 };
+
+function characterModels() {
+  const C = (def) => ({ default: def, color: true });
+  const E = (def, list) => ({ default: def, enum: list });
+  const aliases = [...Object.keys(ARCHETYPES), 'people', 'persons', 'men', 'women', 'children', 'kids', 'human', 'character', 'figure', 'lady', 'guy', 'gentleman', 'villager', 'villagers', 'warrior', 'mage', 'sorcerer', 'sorceress', 'toddler', 'teenager', 'grandmother', 'grandfather', 'pedestrian', 'tourist', 'citizen', 'npc'];
+  const map = { people: 'person', persons: 'person', men: 'man', women: 'woman', children: 'child', kids: 'child', human: 'person', character: 'person', figure: 'person', lady: 'woman', guy: 'man', gentleman: 'businessman', villager: 'farmer', villagers: 'farmer', warrior: 'soldier', mage: 'wizard', sorcerer: 'wizard', sorceress: 'witch', toddler: 'baby', teenager: 'teen', grandmother: 'grandma', grandfather: 'grandpa', pedestrian: 'person', tourist: 'person', citizen: 'person', npc: 'person' };
+  return {
+    human: {
+      fn: HUMAN_FACTORY, kind: 'character', footprint: 0.4, height: 1.75, natural: true, variants: true, rigged: true,
+      size: (p) => ({ footprint: 0.35 * (p.height ?? 1.74) / 1.74 * (p.girth ?? 1) + (p.prop === 'swordshield' || p.prop === 'shield' ? 0.2 : 0), height: p.height ?? 1.74 }),
+      params: {
+        archetype: E('person', Object.keys(ARCHETYPES)), age: E('adult', Object.keys(AGES)), sex: E('neutral', ['male', 'female', 'neutral']), build: E('average', Object.keys(BUILDS)),
+        height: P(1.74, 0.5, 3), headUnits: P(7.5, 3.5, 9), legRatio: P(0.5, 0.36, 0.58), girth: P(1, 0.7, 1.7), shoulders: P(1, 0.7, 1.5),
+        skin: C(0xc68e6a), hair: E('short', HAIR_STYLES), hairColor: C(0x2e1d12), eyeColor: C(0x5a3418), beard: E('none', ['none', 'stubble', 'mustache', 'goatee', 'full']),
+        glasses: E('none', ['none', 'glasses', 'sunglasses']), ears: E('round', ['round', 'pointy']), earScale: P(1, 0.5, 3), noseScale: P(1, 0.5, 3), eyeScale: P(1, 0.5, 2), tusks: { default: false },
+        outfit: E('casual', OUTFITS), top: C(0x2f4f7f), bottom: C(0x2b3a55), shoes: C(0x2a2420), accent: C(undefined), shorts: { default: false }, skirt: { default: false },
+        hat: E('none', HATS), hatColor: C(undefined), prop: E('none', PROPS), cape: C(undefined), pose: E('normal', ['normal', 'zombie', 'ride']), lod: E('high', ['high', 'low']),
+        vary: { default: false }, varySex: { default: false }, varySkin: { default: false }, varyHair: { default: false }, varyClothes: { default: false },
+      },
+      aliases,
+      aliasParams: Object.fromEntries(aliases.map((a) => [a, { archetype: map[a] ?? a }])),
+    },
+  };
+}
+
+function creatureModels() {
+  const plans = {};
+  for (const [name, sp] of Object.entries(SPECIES)) (plans[sp.plan] ||= []).push(name);
+  const extra = { quadruped: { kitten: 'cat', kitty: 'cat', bunny: 'rabbit', hare: 'rabbit', stag: 'deer', reindeer: 'deer', doe: 'deer', lamb: 'sheep', cattle: 'cow', calf: 'cow', ox: 'bull', foal: 'pony', mare: 'horse', stallion: 'horse', cub: 'bear', dino: 'dinosaur', brontosaurus: 'dinosaur', piglet: 'pig', hound: 'dog', wolves: 'wolf', mice: 'mouse', 'polar bears': 'polar bear' },
+    bird: { hen: 'chicken', rooster: 'chicken', chick: 'chicken', seagull: 'bird', gull: 'bird', pigeon: 'bird', dove: 'bird', hawk: 'eagle', falcon: 'eagle', raven: 'crow', geese: 'duck', goose: 'duck' },
+    fish: { shark: 'shark', orca: 'whale' },
+    serpent: { serpent: 'snake', viper: 'snake' },
+    arthropod: { bug: 'ladybug', insect: 'beetle', tarantula: 'giant spider', lobster: 'crab' } };
+  const out = {};
+  for (const [plan, names] of Object.entries(plans)) {
+    // union of every preset key for this body plan -> param schema
+    const params = { species: { default: names[0], enum: names }, vary: { default: false }, size: P(1, 0.01, 30), saddle: { default: false } };
+    // Defaults come from the plan's default species; optional features (wings, horns,
+    // spots…) that species lacks default to undefined = absent.
+    const def = SPECIES[names[0]];
+    for (const n of names) for (const [k, v] of Object.entries(SPECIES[n])) {
+      if (k === 'plan' || params[k]) continue;
+      const d = def[k];
+      if (typeof v === 'boolean') params[k] = { default: d ?? false };
+      else if (typeof v === 'string') params[k] = { default: d, enum: [...new Set(names.map((x) => SPECIES[x][k]).filter((x) => typeof x === 'string'))] };
+      else if (/^(coat|belly|accent|hornColor|nose|eye|headColor|tailTip|body|wing|head|beak|legs|fin|spotColor|stripeColor)$/.test(k)) params[k] = { default: d, color: true };
+      else params[k] = { default: d, min: -5, max: 100 };
+    }
+    const aliases = [...names, ...Object.keys(extra[plan] || {})];
+    const presetFor = (a) => SPECIES[a] ? a : extra[plan][a];
+    out[plan] = {
+      fn: CREATURE_FACTORIES[plan], kind: 'creature', footprint: 0.6, height: 0.8, natural: true, variants: true, rigged: true,
+      size: (p) => creatureSize(plan, p),
+      params, aliases,
+      aliasParams: Object.fromEntries(aliases.map((a) => [a, { species: presetFor(a) }])),
+    };
+  }
+  return out;
+}
+
+function creatureSize(plan, p) {
+  if (plan === 'quadruped') {
+    const e = p.neckAngle ?? 0.8, nl = p.neckLen ?? 0.2;
+    return { footprint: Math.max((p.bodyLen ?? 0.8) / 2 + nl * Math.cos(e) + (p.headLen ?? 0.25) * 0.6, (p.wingSpan ?? 0) * 0.8, (p.bodyW ?? 0.3)), height: (p.legLen ?? 0.4) + (p.bodyH ?? 0.3) + nl * Math.sin(e) + (p.headH ?? 0.15) };
+  }
+  if (plan === 'bird') return { footprint: (p.size ?? 0.2) * 0.7, height: (p.size ?? 0.2) * (1 + 0.35 * (p.legLen ?? 1) + (p.upright ?? 0) * 0.5) };
+  if (plan === 'fish') return { footprint: (p.length ?? 0.4) * 0.55, height: (p.length ?? 0.4) * 0.45 };
+  if (plan === 'serpent') return { footprint: (p.length ?? 1.6) * 0.5, height: (p.radius ?? 0.04) * 2 + (p.raised ? (p.length ?? 1.6) * 0.25 : 0) };
+  return { footprint: (p.size ?? 0.15) * 0.9, height: (p.size ?? 0.15) * 0.8 };
+}
+
+/** Footprint radius and height of an object, accounting for its params and scale. */
+export function sizeOf(o) {
+  const m = MODELS[o.model];
+  const s = m.size ? m.size(o.params || {}) : { footprint: m.footprint, height: m.height };
+  const k = o.scale ?? 1;
+  return { footprint: s.footprint * k, height: s.height * k };
+}
 
 /** alias (lower-case) -> { model, params } */
 export const MODEL_ALIASES = (() => {
@@ -305,7 +388,7 @@ export const MODEL_ALIASES = (() => {
 
 export function modelDefaults(name) {
   const out = {};
-  for (const [k, v] of Object.entries(MODELS[name].params)) out[k] = v.default;
+  for (const [k, v] of Object.entries(MODELS[name].params)) if (v.default !== undefined) out[k] = v.default;
   return out;
 }
 
@@ -317,6 +400,7 @@ export function sanitizeParams(name, params = {}) {
     const s = schema[k];
     if (!s) continue;
     if (s.enum) { if (s.enum.includes(v)) out[k] = v; continue; }
+    if (s.color) { const c = resolveColor(v); if (c !== undefined) out[k] = c; continue; }
     if (typeof s.default === 'boolean') { out[k] = Boolean(v); continue; }
     const n = Number(v);
     if (Number.isFinite(n)) out[k] = Math.min(s.max ?? Infinity, Math.max(s.min ?? -Infinity, n));

@@ -1,5 +1,6 @@
 import { Agent, SubAgent, assert } from '../core/agent.js';
-import { MODELS } from '../library/models.js';
+import { MODELS, sizeOf } from '../library/models.js';
+import { ANIMATIONS } from '../library/presets.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
 
@@ -8,16 +9,17 @@ function planLayout(spec) {
   const space = spec.environment.ground === 'none';
   const items = [];
   // Hero row: single objects and small groups (≤3) of non-natural models, centred.
-  const isHero = (o) => !o.position && o.count <= 3 && !(o.count > 1 && MODELS[o.model].natural) && ['primitive', 'procedural', 'parametric'].includes(o.kind);
+  const cast = (o) => o.kind === 'character' || o.kind === 'creature';
+  const isHero = (o) => !o.attach && !o.position && o.count <= 3 && (cast(o) || !(o.count > 1 && MODELS[o.model].natural)) && ['primitive', 'procedural', 'parametric', 'character', 'creature'].includes(o.kind);
   const heroes = spec.objects.filter(isHero);
   const gap = 1.2;
   const spread = space ? 2.5 : 1;
-  const width = heroes.reduce((s, o) => s + (MODELS[o.model].footprint * o.scale * 2 * spread + gap) * o.count, -gap);
+  const width = heroes.reduce((s, o) => s + (sizeOf(o).footprint * 2 * spread + gap) * o.count, -gap);
   let x = -width / 2;
   let heroExtent = 0, heroHeight = 0;
   const occupied = [];
   for (const o of heroes) {
-    const fp = MODELS[o.model].footprint * o.scale * spread;
+    const fp = sizeOf(o).footprint * spread;
     const positions = [];
     for (let i = 0; i < o.count; i++) {
       x += fp;
@@ -26,14 +28,21 @@ function planLayout(spec) {
       heroExtent = Math.max(heroExtent, Math.abs(x) + fp);
       x += fp + gap;
     }
-    heroHeight = Math.max(heroHeight, MODELS[o.model].height * o.scale);
+    heroHeight = Math.max(heroHeight, sizeOf(o).height);
+    // moving heroes loop around the centre: keep their whole path in frame
+    if (ANIMATIONS[o.animation?.type]?.locomotion) {
+      const R = Math.max(...positions.map((q) => Math.abs(q[0])), fp * 2.5, 1.2);
+      heroExtent = Math.max(heroExtent, R + fp);
+      if (o.animation.type === 'fly') heroHeight = Math.max(heroHeight, Math.max(1.2, fp * 3) + sizeOf(o).height);
+    }
     items.push({ id: o.id, mode: 'row', positions });
   }
-  for (const o of spec.objects.filter((o) => o.position)) {
+  for (const o of spec.objects.filter((o) => o.attach)) items.push({ id: o.id, mode: 'attached' });
+  for (const o of spec.objects.filter((o) => o.position && !o.attach)) {
     items.push({ id: o.id, mode: 'row', positions: [o.position] });
-    occupied.push([o.position[0], o.position[2], MODELS[o.model].footprint * o.scale + 0.4]);
-    heroExtent = Math.max(heroExtent, Math.hypot(o.position[0], o.position[2]) + MODELS[o.model].footprint * o.scale);
-    heroHeight = Math.max(heroHeight, MODELS[o.model].height * o.scale + Math.max(0, o.position[1]));
+    occupied.push([o.position[0], o.position[2], sizeOf(o).footprint + 0.4]);
+    heroExtent = Math.max(heroExtent, Math.hypot(o.position[0], o.position[2]) + sizeOf(o).footprint);
+    heroHeight = Math.max(heroHeight, sizeOf(o).height + Math.max(0, o.position[1]));
   }
   if (heroExtent === 0) heroExtent = 1;
 
@@ -49,8 +58,8 @@ function planLayout(spec) {
   const inner = heroExtent + 1.5;
   let area = 0, extent = Math.max(heroExtent, water ? -water.position[2] + (w.params.size ?? 20) / 2 : 0);
   spec.objects.forEach((o, idx) => {
-    if (o.count < 2 || isHero(o)) return;
-    const fp = MODELS[o.model].footprint * o.scale;
+    if (o.count < 2 || isHero(o) || o.attach) return;
+    const fp = sizeOf(o).footprint;
     const minDist = r2(Math.max(0.5, fp * 1.6));
     area += o.count * (minDist * 1.25) ** 2 * Math.PI;
     const outer = r2(Math.sqrt(inner * inner + area / Math.PI) * 1.15 + fp);
@@ -84,14 +93,15 @@ function planEnvironment(spec, layout) {
 
 function frameCamera(layout) {
   const fov = 50;
-  const subject = Math.max(layout.heroExtent * 1.25, layout.heroHeight * 1.2, Math.min(layout.extent * 0.45, 30), 2);
-  const d = Math.max(subject / Math.tan((fov * Math.PI) / 360), 5);
-  const target = [0, r2(layout.heroHeight * (layout.space ? 0.5 : 0.4)), 0];
+  // frame the hero row tightly; only pull back for scattered surroundings when there is no hero
+  const subject = Math.max(layout.heroExtent * 1.15, layout.heroHeight * 0.8, Math.min(layout.extent * (layout.heroExtent > 1 ? 0.45 : 0.3), 30), 0.25);
+  const d = Math.max(subject / Math.tan((fov * Math.PI) / 360), 0.8);
+  const target = [0, r2(layout.heroHeight * (layout.space ? 0.5 : 0.45)), 0];
   return {
     fov,
-    position: [r2(d * 0.62), r2(target[1] + d * 0.42), r2(d * 0.78)],
+    position: [r2(d * 0.62), r2(target[1] + d * 0.3), r2(d * 0.78)],
     target,
-    near: 0.1,
+    near: Math.min(0.1, r2(d * 0.02) || 0.01),
     far: Math.ceil(Math.max(1000, layout.extent * 20)),
     maxDistance: Math.ceil(Math.max(d * 3, layout.extent * 2)),
     maxPolar: layout.space ? Math.PI : r2(Math.PI * 0.49),
@@ -143,6 +153,13 @@ export class ComposerAgent extends Agent {
     const layout = await this.delegate('layout-planner', spec, ctx);
     const env = await this.delegate('environment-builder', { spec, layout }, ctx);
     const camera = await this.delegate('camera-framer', layout, ctx);
+    // keep scattered props off the camera and out of its line of sight to the heroes
+    const [cx, , cz] = camera.position;
+    const dist = Math.hypot(cx, cz);
+    for (const k of [1, 0.7, 0.45]) {
+      const r = Math.max(1, dist * 0.18 * k + (k === 1 ? 1 : 0));
+      if (dist * k > layout.heroExtent + r * 0.5) layout.occupied.push([r2(cx * k), r2(cz * k), r2(r)]);
+    }
     return { layout, env, camera };
   }
 }

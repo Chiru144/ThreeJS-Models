@@ -2,7 +2,7 @@
 
 An MCP server that turns a sentence (or a JSON spec) into a **validated, modern three.js scene**: a self-contained `index.html` you can open, plus a reusable `scene.js` module you can drop into any app (Vite, React, Next, plain JS).
 
-Inside, an **orchestrator** routes every request through **10 agents and 31 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine.
+Inside, an **orchestrator** routes every request through **12 agents and 44 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine. Dedicated **character** and **creature** agents plan people, animals and fantasy creatures in detail before they are built.
 
 ![Four generated scenes](docs/preview.png)
 
@@ -15,7 +15,7 @@ git clone https://github.com/chiru144/threejs-models.git
 cd threejs-models
 npm install
 npm run doctor        # checks every agent + sub-agent in YOUR environment
-npm test              # full test suite (93 tests)
+npm test              # full test suite (127 tests)
 ```
 
 ### Connect it to your MCP client
@@ -40,7 +40,7 @@ claude mcp add threejs-forge -- node /absolute/path/to/threejs-models/src/server
 }
 ```
 
-Then just ask: *"Use threejs-forge to build a snowy village at night with glowing windows and 3 floating crystals."*
+Then just ask: *"Use threejs-forge to build a snowy village at night with glowing windows and 3 floating crystals."* or *"Design an old wizard with a long white beard waving."*
 
 ## Tools
 
@@ -48,37 +48,66 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 |---|---|---|
 | `forge_build` | Prompt or spec → `index.html` + `scene.js` + `spec.json`, validated in real three.js | ~450 chars |
 | `forge_plan` | Prompt → compact JSON spec (no code). Edit it, then pass it to `forge_build` | ~300 chars |
-| `forge_model` | One model (`tree`, `car`, `robot`, `vase`…) as `createModel(THREE, params)` | code, or a path with `out_file` |
+| `forge_character` | One person, animal or creature from a description → design sheet + rigged `model.js` + studio preview | ~800 chars |
+| `forge_model` | One model (`tree`, `car`, `knight`, `horse`, `owl`…) as `createModel(THREE, params)` | code, or a path with `out_file` |
 | `forge_review` | Reviews *your* three.js code: removed APIs, per-frame allocations, shadows, colour space, resize, pixel ratio. Score + fixes | one line per finding |
-| `forge_catalog` | Models + params, materials, colours, lighting, animations, budgets, agents, spec example. Request one `section` at a time | 0.3–2 KB |
+| `forge_catalog` | Models + params, characters, creatures, materials, colours, lighting, animations, budgets, agents, spec example. Request one `section` at a time | 0.3–3 KB |
 | `forge_health` | Runs every agent and sub-agent self-test plus an end-to-end build | ~1 KB |
 
 ## Agents and sub-agents
 
 ```
-                         ┌──────────────── Orchestrator ────────────────┐
- prompt / spec ──► planner ─► material ─► optimizer ─► composer ─► modeler ─► animation ─► lighting ─► codegen ─► validator ──► files + summary
-                                                                                                  reviewer ◄── forge_review (your code)
+                         ┌──────────────────────────── Orchestrator ────────────────────────────┐
+ prompt / spec ──► planner ─► character ─► creature ─► material ─► optimizer ─► composer ─► modeler
+                   (people)    (animals)                                                     │
+        files + summary ◄── validator ◄── codegen ◄── lighting ◄── animation ◄──────────────┘
+                                                      reviewer ◄── forge_review (your code)
 ```
 
 | Agent | Sub-agents | Job |
 |---|---|---|
 | **planner** | intent-parser · theme-expander · spec-normalizer | Reads counts, colours, materials, motion, lighting and quality words. Expands themes (forest, village, city, desert, space, cave, dining room…). Validates and clamps any spec |
+| **character** | archetype-resolver · anatomy-planner · appearance-planner · wardrobe-planner · pose-planner · relation-planner · rig-inspector | Plans each person like a character artist: 42 archetypes; real head-unit proportions by age, sex and build; skin, hair, eyes, facial hair, glasses; outfit, colours, hat, cape and prop; pose. Seats riders on mounts, puts pets beside their owner, then builds the rig in three.js to check feet are on the ground, the height is right and every pose works |
+| **creature** | species-classifier · morphology-planner · coat-planner · behavior-planner · rig-inspector | 56 species across 5 body plans (quadruped, bird, fish, serpent, arthropod). Sets proportions, ears, horns, tail, wings, trunk and mane; coat colours, spots and stripes; "baby", "winged" and "fat" modifiers; a gait that fits the body (horses gallop, penguins can't fly, sharks swim) |
 | **material** | color-resolver · preset-mapper · material-dedup | Colour names/hex → PBR presets (metal, chrome, gold, glass, ice, ceramic, car paint, neon, lava, toon…). Identical materials are shared |
 | **optimizer** | cost-estimator · instancing-advisor · budget-planner | Builds each model in real three.js to count triangles and parts. Repeated objects become `InstancedMesh` (400 trees = same draw calls as 10). Counts are trimmed to the quality budget |
 | **composer** | layout-planner · environment-builder · camera-framer | Hero row at the centre, collision-free scatter rings around it, ground/terrain/lake basins, camera and orbit limits |
-| **modeler** | primitive · procedural · parametric · environment modelers | 23 models: primitives, tree, rock, mushroom, crystal, house, car, robot, planet (+rings), vase (lathe), table, chair, lamp, water, ground, terrain, starfield |
-| **animation** | motion-binder · loop-emitter | rotate, float, orbit, pulse, sway, bounce. Per object, per copy (phase-offset) or per instanced group. Emits only the cases used |
+| **modeler** | primitive · procedural · parametric · environment · rigged modelers | 23 props/environment models plus 6 articulated, rigged body plans (human, quadruped, bird, fish, serpent, arthropod) |
+| **animation** | motion-binder · loop-emitter | rotate, float, orbit, pulse, sway and bounce, plus rig motion: idle, walk, run, wave, dance, fly, swim and slither. Limbs animate and the figure travels a loop, with speed scaled to body size. Emits only the cases used |
 | **lighting** | rig-selector · shadow-configurator | studio, daylight, sunset, night, space and neon rigs. One shadow caster with a frustum fitted to the scene |
 | **codegen** | module-emitter · html-emitter · model-emitter | r187 best practice: `outputColorSpace`, ACES tone mapping, PMREM `RoomEnvironment`, `Timer`, `setAnimationLoop`, capped pixel ratio, resize, `dispose()` |
 | **validator** | syntax-validator · runtime-validator · budget-checker · best-practice-linter | Parses the output, **imports and runs it against real three.js in Node**, runs `update()` and `dispose()`, measures draw calls and triangles, lints |
 | **reviewer** | syntax-checker · api-auditor · performance-auditor · correctness-auditor | Same rule engine, applied to your code |
 
+## Characters, animals and creatures
+
+![Characters and creatures](docs/characters.png)
+
+*"a knight in golden armor with a red cape riding a white horse" · "an old wizard with a long white beard waving" · "a woman with long red hair in a green dress walking her dog" · "a red dragon" · "an elephant" · "a tiger" · "an owl" · "a park with 20 people walking and 2 dogs"*
+
+Describe people the way you'd brief an artist:
+
+```
+forge_character  "a tall old woman with long grey hair, blue eyes and glasses in a green dress, waving"
+→ sheet: old woman, elder female, 1.78 m (7.3 heads), average | skin … · long hair #9a9a9a · eyes #3d77c2 · glasses | dress (top #3c9a3c …) | pose wave
+```
+
+- **People**
+  - **What the agent reads:** age (baby → elder), sex, build (slim, athletic, heavy), height (tall, short), skin tone (a realistic range plus fantasy tones), hair (11 styles and named colours), eye colour, beard, mustache, stubble, glasses and pointed ears.
+  - **Clothes:** 15 outfits (suit, dress, hoodie, armor, robe, lab coat, spacesuit…), each garment can be coloured ("red shoes", "black suit"), plus hats, capes and props (sword and shield, staff, wand, torch, book, briefcase).
+  - **Pose:** idle, walk, run, wave or dance.
+  - **Archetypes:** knight, wizard, witch, king, queen, princess, soldier, police, firefighter, doctor, nurse, chef, scientist, astronaut, pirate, ninja, cowboy, farmer, athlete, elf, goblin, orc, zombie, vampire and more.
+- **Animals and creatures:** dog, cat, wolf, fox, horse, zebra, cow, pig, sheep, goat, deer, bear, lion, tiger, elephant, giraffe, rabbit, mouse, unicorn, pegasus, dragon and dinosaur. Birds (eagle, owl, parrot, penguin, duck, chicken, flamingo…), fish (goldfish, clownfish, koi, shark, whale, dolphin), snakes (snake, python, cobra, eel, worm), spiders, ants, beetles, scorpions and crabs. Modifiers: colours ("black and white"), spotted, striped, baby, winged, horned, fat or skinny, long-necked, and materials (golden, glass, stone).
+- **Relationships:** "a knight **riding** a horse" seats the rider in a saddle, and the rider moves with the mount. "a girl **walking her** dog" keeps the dog beside her as she walks.
+- **Crowds:** "20 people" each get their own look (sex, skin, hair, clothes). Large crowds are instanced from a few looks with a lighter mesh.
+- **Themes:** farm, savanna/safari, jungle, underwater/reef/aquarium, medieval, castle, park, street, crowd, zoo and graveyard.
+- **Rigged output:** every person and creature is a jointed model. `model.userData.rig(seconds, 'walk')` animates it in your own app, and the generated scenes already do this. Parts are merged per joint, so a fully detailed person costs about 20–30 draw calls.
+
 ## Token efficiency
 
-- **No hidden LLM calls.** The agents are deterministic code, so a build costs only the tool call and its short reply. No sub-model is called and nothing is billed per agent.
+- **No hidden LLM calls.** The agents (including the character and creature planners) are deterministic code, so a build costs only the tool call and its short reply. No sub-model is called and nothing is billed per agent.
 - **Files go to disk; replies are summaries.** `forge_build` returns about 6 lines (paths, object list, draw calls, triangles, check results). Ask for code with `return_code: true` only when you need it inline.
-- **Lean tool definitions** (~4.8 KB in total). They sit in every prompt, so a test guards their size.
+- **Lean tool definitions** (~5.5 KB in total). They sit in every prompt, so a test guards their size.
 - **Plan → edit → build.** `forge_plan` returns a ~300-char spec. Changing one field and rebuilding is cheaper than describing the whole scene again.
 - **Cached plans and model costs.** Repeat prompts skip the planner, and model costs are measured once per process.
 - **Lean output code.** Only the helpers, factories and animation cases a scene uses are emitted.
@@ -94,6 +123,9 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
   "environment": { "ground": "stone", "fog": true },
   "objects": [
     { "model": "robot", "color": "cyan", "preset": "metal", "animation": { "type": "float", "speed": 1.2 } },
+    { "model": "knight", "description": "a tall knight in golden armor with a red cape", "animation": "wave" },
+    { "model": "person", "count": 8, "animation": "walk" },
+    { "model": "horse", "description": "a white horse with a grey mane" },
     { "model": "house", "count": 5, "params": { "lit": true } },
     { "model": "lamp", "count": 4 },
     { "model": "tree", "count": 20, "params": { "style": "round" }, "scale": 1.2 },
@@ -102,6 +134,7 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 }
 ```
 
+- People and animals take a `description` (read by the character/creature agents) and/or exact `params`. `forge_plan` returns the fully planned params, so you can tweak one (say, `"hair": "bun"`) and rebuild.
 - `quality` is `low`, `medium` or `high`. It sets pixel-ratio cap, antialiasing, shadow map size, and triangle and draw-call budgets.
 - `ground` is `grass`, `sand`, `snow`, `stone`, `wood`, `matte`, `metal` or `none`.
 - Every build also writes `spec.json`, so any scene can be rebuilt or tweaked exactly. Output is deterministic (seeded).
@@ -123,10 +156,10 @@ renderer.setAnimationLoop((t) => { timer.update(t); app.update(timer.getElapsed(
 ## Checking your environment
 
 ```bash
-npm run doctor              # env + deps, all 10 agents / 31 sub-agents, 4 full builds, file writes, MCP stdio round-trip
+npm run doctor              # env + deps, all 12 agents / 44 sub-agents, 7 full builds, file writes, MCP stdio round-trip
 npm run doctor -- --browser # also renders a scene in headless Chromium (needs playwright)
 npm run doctor -- --json    # machine-readable, for CI
-npm test                    # node:test: every sub-agent, pipeline, all 23 models, reviewer, real MCP client
+npm test                    # node:test: every sub-agent, pipeline, all models, every archetype and species, rigs, reviewer, real MCP client
 ```
 
 Any failure names the exact `agent/sub-agent` and the error. From inside an MCP client, call `forge_health`.
@@ -143,12 +176,13 @@ Requires Node.js ≥ 18.17. Generated pages load three.js r187 from jsDelivr via
 ## Project layout
 
 ```
-src/server.js            MCP server (stdio) — 6 tools
+src/server.js            MCP server (stdio) — 7 tools
 src/core/orchestrator.js routes tasks through agents, caching, file output
 src/core/agent.js        Agent / SubAgent base classes (delegate, trace, self-test)
 src/core/sandbox.js      runs models in real three.js (Node) to measure them
-src/agents/*.js          the 10 agents and their sub-agents
-src/library/*.js         models, materials, lighting/animation/quality presets, review rules
+src/agents/*.js          the 12 agents and their sub-agents (character.js, creature.js = specialists)
+src/library/*.js         models, characters (human factory + archetypes), creatures (species + 5 body plans),
+                         materials, lighting/animation/quality presets, review rules
 bin/doctor.js            environment check
 test/*.test.js           test suite
 ```

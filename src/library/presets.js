@@ -45,6 +45,12 @@ export const LIGHTING = {
     ],
     words: ['neon', 'cyberpunk', 'synthwave', 'vaporwave', 'retro'],
   },
+  underwater: {
+    background: 0x0b4f6c, fog: 0x0b4f6c, exposure: 1.05, envIntensity: 0.3,
+    hemi: [0x6fc3df, 0x0a2a3a, 0.9],
+    lights: [{ type: 'DirectionalLight', color: 0xbfefff, intensity: 1.8, dir: [0.2, 1, 0.15], shadow: true }],
+    words: ['underwater', 'under water', 'aquarium', 'seabed', 'ocean floor', 'reef', 'coral', 'deep sea', 'undersea'],
+  },
 };
 
 export const ANIMATIONS = {
@@ -54,12 +60,21 @@ export const ANIMATIONS = {
   pulse: { speed: 2, amp: 0.08, words: ['pulsing', 'pulse', 'breathing', 'throbbing'] },
   sway: { speed: 1.2, amp: 0.08, words: ['swaying', 'sway', 'wobbling', 'rocking'] },
   bounce: { speed: 3, amp: 0.6, words: ['bouncing', 'bounce', 'jumping', 'hopping'] },
+  // rig-driven (characters & creatures): limbs animate, locomotion moves along a loop
+  idle: { speed: 1, rig: true, words: ['idle', 'standing', 'resting', 'breathing', 'grazing', 'sitting'] },
+  walk: { speed: 1, rig: true, locomotion: 1.2, words: ['walking', 'walk', 'strolling', 'wandering', 'marching', 'patrolling', 'waddling', 'roaming', 'crawling'] },
+  run: { speed: 1, rig: true, locomotion: 3.2, words: ['running', 'run', 'jogging', 'sprinting', 'galloping', 'racing', 'charging', 'chasing'] },
+  wave: { speed: 1, rig: true, words: ['waving', 'wave', 'greeting'] },
+  dance: { speed: 1, rig: true, words: ['dancing', 'dance', 'partying'] },
+  fly: { speed: 1, rig: true, locomotion: 4, words: ['flying', 'fly', 'soaring', 'gliding'] },
+  swim: { speed: 1, rig: true, locomotion: 1, words: ['swimming', 'swim', 'diving'] },
+  slither: { speed: 1, rig: true, locomotion: 0.6, words: ['slithering', 'slither', 'snaking'] },
 };
 
 export const QUALITY = {
-  low: { pixelRatioCap: 1, antialias: false, shadowMapSize: 1024, shadows: false, triBudget: 150_000, drawBudget: 60, instanceThreshold: 3 },
-  medium: { pixelRatioCap: 1.5, antialias: true, shadowMapSize: 2048, shadows: true, triBudget: 750_000, drawBudget: 150, instanceThreshold: 4 },
-  high: { pixelRatioCap: 2, antialias: true, shadowMapSize: 4096, shadows: true, triBudget: 3_000_000, drawBudget: 400, instanceThreshold: 6 },
+  low: { pixelRatioCap: 1, antialias: false, shadowMapSize: 1024, shadows: false, triBudget: 150_000, drawBudget: 100, instanceThreshold: 3 },
+  medium: { pixelRatioCap: 1.5, antialias: true, shadowMapSize: 2048, shadows: true, triBudget: 750_000, drawBudget: 300, instanceThreshold: 4 },
+  high: { pixelRatioCap: 2, antialias: true, shadowMapSize: 4096, shadows: true, triBudget: 3_000_000, drawBudget: 800, instanceThreshold: 6 },
 };
 
 export const THREE_VERSION = '0.187.0';

@@ -43,7 +43,10 @@ function planBudget({ objects, quality }, ctx) {
     }
     tris = objects.reduce((s, o) => s + o.cost.triangles * o.count, 0);
   }
-  if (draws > q.drawBudget) ctx?.warn(`~${draws} draw calls exceeds the ${quality} budget (${q.drawBudget}); reduce unique animated objects.`);
+  if (draws > q.drawBudget) {
+    const heavy = objects.filter((o) => !o.instanced && o.count > 3).map((o) => `${o.id}×${o.count}`).join(', ');
+    ctx?.warn(`~${draws} draw calls exceeds the ${quality} budget (${q.drawBudget})${heavy ? `: individually animated ${heavy}; fewer copies or no animation lets them instance` : ''}.`);
+  }
   if (lights > 8) ctx?.warn(`${lights} point lights from lamps: expensive on mobile. Consider fewer lamps or quality "low".`);
   return { triangles: tris, drawCalls: draws };
 }

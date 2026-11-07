@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { MODELS } from '../library/models.js';
 import * as H from '../library/helpers.js';
 
-const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize].map((f) => f.toString()).join('\n');
+const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize, H.mergeParts].map((f) => f.toString()).join('\n');
 
 export function makeMaterialCache() {
   const mats = new Map();
