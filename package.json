@@ -1,0 +1,26 @@
+{
+  "name": "threejs-forge-mcp",
+  "version": "1.0.0",
+  "description": "MCP server with an orchestrator of agents and sub-agents that plans, models, lights, animates, optimizes, generates and validates Three.js scenes.",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": {
+    "threejs-forge-mcp": "src/server.js",
+    "threejs-forge-doctor": "bin/doctor.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "doctor": "node bin/doctor.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "acorn": "^8.19.0",
+    "three": "^0.187.0",
+    "zod": "^4.6.7"
+  }
+}
