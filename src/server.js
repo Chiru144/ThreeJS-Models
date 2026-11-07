@@ -29,6 +29,7 @@ const objectSchema = z.object({
 const specSchema = z.object({
   title: z.string().optional(),
   quality: z.enum(['low', 'medium', 'high']).optional(),
+  style: z.enum(['realistic', 'stylized']).optional().describe('realistic (sculpted, default) or stylized (low-poly)'),
   seed: z.number().int().optional(),
   lighting: z.union([z.string(), z.object({ preset: z.string(), shadows: z.boolean().optional() })]).optional(),
   environment: z.object({ ground: z.string().optional(), fog: z.boolean().optional(), background: z.union([z.string(), z.number()]).optional() }).optional(),
@@ -84,6 +85,7 @@ export function createServer(orchestrator = new Orchestrator()) {
       preset: z.string().optional(),
       color: z.union([z.string(), z.number()]).optional(),
       out_file: z.string().optional().describe('Write here instead of returning code'),
+      style: z.enum(['realistic', 'stylized']).optional(),
     },
   }, async (args) => {
     try {

@@ -5,8 +5,11 @@
 // Factories are real functions so they are syntax-checked and testable; codegen
 // copies them into the output with Function#toString.
 /* eslint-disable no-undef */
+import { REAL_HUMAN_FACTORY } from './human.js';
 import { HUMAN_FACTORY, ARCHETYPES, OUTFITS, HATS, PROPS, HAIR_STYLES, AGES, BUILDS } from './characters.js';
 import { CREATURE_FACTORIES, SPECIES } from './creatures.js';
+import { REAL_CREATURE_FACTORIES } from './beasts.js';
+import { REAL_PROPS } from './props.js';
 import { resolveColor } from './materials.js';
 
 function makeBox(THREE, M, p, main) {
@@ -250,7 +253,14 @@ function makeGround(THREE, M, p, main) {
   const s = p.size ?? 60;
   const geo = new THREE.PlaneGeometry(s, s);
   geo.rotateX(-Math.PI / 2);
-  const m = new THREE.Mesh(geo, main || M('ground', { color: 0x6c8f4e, roughness: 1 }));
+  const mat = main || M('ground', { color: 0x6c8f4e, roughness: 1 });
+  if (p.kind && p.kind !== 'matte' && p.kind !== 'metal') {
+    // tileable albedo + normal detail, ~3 m per tile
+    const tex = surfaceTex(p.kind);
+    for (const t of [tex.map, tex.normalMap]) { t.repeat.set(s / 3, s / 3); }
+    mat.map = tex.map; mat.normalMap = tex.normalMap; mat.normalScale = new THREE.Vector2(0.8, 0.8);
+  }
+  const m = new THREE.Mesh(geo, mat);
   m.userData.noCast = true;
   return m;
 }
@@ -279,8 +289,8 @@ export const MODELS = {
   torusKnot: { fn: makeTorusKnot, kind: 'primitive', footprint: 1, height: 2.1, params: { radius: P(0.7, 0.1, 50), tube: P(0.22, 0.02, 10), p: P(2, 1, 9), q: P(3, 1, 9) }, aliases: ['knot', 'torusknot', 'torus knot'] },
   capsule: { fn: makeCapsule, kind: 'primitive', footprint: 0.5, height: 1.8, params: { radius: P(0.4, 0.05, 20), length: P(1, 0, 50) }, aliases: ['pill'] },
   crystal: { fn: makeCrystal, kind: 'procedural', footprint: 0.4, height: 1.2, natural: true, params: { height: P(1.2, 0.1, 20) }, aliases: ['gem', 'diamond', 'shard'] },
-  tree: { fn: makeTree, kind: 'procedural', footprint: 1, height: 3, natural: true, params: { height: P(3, 0.5, 30), style: { default: 'pine', enum: ['pine', 'round'] } }, aliases: ['pine', 'oak', 'forest tree'], aliasParams: { oak: { style: 'round' } } },
-  rock: { fn: makeRock, kind: 'procedural', footprint: 0.8, height: 0.6, natural: true, params: { size: P(0.8, 0.1, 20), seed: P(7, 0, 1e6) }, aliases: ['stone', 'boulder', 'asteroid'] },
+  tree: { fn: REAL_PROPS.tree, stylizedFn: makeTree, kind: 'procedural', footprint: 1, height: 3, natural: true, params: { height: P(3, 0.5, 30), style: { default: 'pine', enum: ['pine', 'round'] } }, aliases: ['pine', 'oak', 'forest tree'], aliasParams: { oak: { style: 'round' } } },
+  rock: { fn: REAL_PROPS.rock, stylizedFn: makeRock, kind: 'procedural', footprint: 0.8, height: 0.6, natural: true, params: { size: P(0.8, 0.1, 20), seed: P(7, 0, 1e6) }, aliases: ['stone', 'boulder', 'asteroid'] },
   mushroom: { fn: makeMushroom, kind: 'procedural', footprint: 0.3, height: 0.6, natural: true, params: { height: P(0.6, 0.1, 10) }, aliases: ['toadstool'] },
   house: { fn: makeHouse, kind: 'procedural', footprint: 3, height: 4.5, params: { width: P(4, 1, 30), depth: P(4, 1, 30), height: P(2.6, 1, 20), lit: { default: false } }, aliases: ['home', 'cottage', 'cabin', 'building', 'hut'] },
   car: { fn: makeCar, kind: 'procedural', footprint: 2.2, height: 1.4, params: { length: P(4, 1, 20) }, aliases: ['vehicle', 'automobile'] },
@@ -292,7 +302,7 @@ export const MODELS = {
   chair: { fn: makeChair, kind: 'procedural', footprint: 0.4, height: 1, params: { size: P(0.5, 0.2, 3) }, aliases: ['seat', 'stool'] },
   lamp: { fn: makeLamp, kind: 'procedural', footprint: 0.3, height: 3.6, params: { height: P(3.5, 0.5, 20), light: { default: true }, intensity: P(6, 0, 1000) }, aliases: ['streetlight', 'street lamp', 'lantern', 'lamppost'] },
   water: { fn: makeWater, kind: 'surface', footprint: 0, height: 0, params: { size: P(20, 1, 1000) }, aliases: ['lake', 'pond', 'ocean', 'sea', 'pool'] },
-  ground: { fn: makeGround, kind: 'surface', footprint: 0, height: 0, params: { size: P(60, 1, 5000) }, aliases: ['floor', 'plane'] },
+  ground: { fn: makeGround, kind: 'surface', footprint: 0, height: 0, params: { size: P(60, 1, 5000), kind: { default: undefined, enum: ['grass', 'sand', 'snow', 'stone', 'wood', 'matte', 'metal'] } }, aliases: ['floor', 'plane'] },
   terrain: { fn: makeTerrain, kind: 'surface', footprint: 0, height: 0, params: { size: P(80, 4, 2000), segments: P(96, 4, 512), amp: P(1.5, 0, 100) }, aliases: ['hills', 'landscape', 'mountains', 'hill'] },
   ...characterModels(),
   ...creatureModels(),
@@ -305,7 +315,7 @@ function characterModels() {
   const map = { people: 'person', persons: 'person', men: 'man', women: 'woman', children: 'child', kids: 'child', human: 'person', character: 'person', figure: 'person', lady: 'woman', guy: 'man', gentleman: 'businessman', villager: 'farmer', villagers: 'farmer', warrior: 'soldier', mage: 'wizard', sorcerer: 'wizard', sorceress: 'witch', toddler: 'baby', teenager: 'teen', grandmother: 'grandma', grandfather: 'grandpa', pedestrian: 'person', tourist: 'person', citizen: 'person', npc: 'person' };
   return {
     human: {
-      fn: HUMAN_FACTORY, kind: 'character', footprint: 0.4, height: 1.75, natural: true, variants: true, rigged: true,
+      fn: REAL_HUMAN_FACTORY, stylizedFn: HUMAN_FACTORY, kind: 'character', footprint: 0.4, height: 1.75, natural: true, variants: true, rigged: true,
       size: (p) => ({ footprint: 0.35 * (p.height ?? 1.74) / 1.74 * (p.girth ?? 1) + (p.prop === 'swordshield' || p.prop === 'shield' ? 0.2 : 0), height: p.height ?? 1.74 }),
       params: {
         archetype: E('person', Object.keys(ARCHETYPES)), age: E('adult', Object.keys(AGES)), sex: E('neutral', ['male', 'female', 'neutral']), build: E('average', Object.keys(BUILDS)),
@@ -313,7 +323,7 @@ function characterModels() {
         skin: C(0xc68e6a), hair: E('short', HAIR_STYLES), hairColor: C(0x2e1d12), eyeColor: C(0x5a3418), beard: E('none', ['none', 'stubble', 'mustache', 'goatee', 'full']),
         glasses: E('none', ['none', 'glasses', 'sunglasses']), ears: E('round', ['round', 'pointy']), earScale: P(1, 0.5, 3), noseScale: P(1, 0.5, 3), eyeScale: P(1, 0.5, 2), tusks: { default: false },
         outfit: E('casual', OUTFITS), top: C(0x2f4f7f), bottom: C(0x2b3a55), shoes: C(0x2a2420), accent: C(undefined), shorts: { default: false }, skirt: { default: false },
-        hat: E('none', HATS), hatColor: C(undefined), prop: E('none', PROPS), cape: C(undefined), pose: E('normal', ['normal', 'zombie', 'ride']), lod: E('high', ['high', 'low']),
+        hat: E('none', HATS), hatColor: C(undefined), prop: E('none', PROPS), cape: C(undefined), pose: E('normal', ['normal', 'zombie', 'ride']), lod: E('high', ['high', 'low']), bust: P(1, 0.5, 1.6),
         vary: { default: false }, varySex: { default: false }, varySkin: { default: false }, varyHair: { default: false }, varyClothes: { default: false },
       },
       aliases,
@@ -333,7 +343,7 @@ function creatureModels() {
   const out = {};
   for (const [plan, names] of Object.entries(plans)) {
     // union of every preset key for this body plan -> param schema
-    const params = { species: { default: names[0], enum: names }, vary: { default: false }, size: P(1, 0.01, 30), saddle: { default: false } };
+    const params = { species: { default: names[0], enum: names }, vary: { default: false }, size: P(1, 0.01, 30), saddle: { default: false }, lod: { default: 'high', enum: ['high', 'low'] } };
     // Defaults come from the plan's default species; optional features (wings, horns,
     // spots…) that species lacks default to undefined = absent.
     const def = SPECIES[names[0]];
@@ -348,7 +358,7 @@ function creatureModels() {
     const aliases = [...names, ...Object.keys(extra[plan] || {})];
     const presetFor = (a) => SPECIES[a] ? a : extra[plan][a];
     out[plan] = {
-      fn: CREATURE_FACTORIES[plan], kind: 'creature', footprint: 0.6, height: 0.8, natural: true, variants: true, rigged: true,
+      fn: REAL_CREATURE_FACTORIES[plan], stylizedFn: CREATURE_FACTORIES[plan], kind: 'creature', footprint: 0.6, height: 0.8, natural: true, variants: true, rigged: true,
       size: (p) => creatureSize(plan, p),
       params, aliases,
       aliasParams: Object.fromEntries(aliases.map((a) => [a, { species: presetFor(a) }])),

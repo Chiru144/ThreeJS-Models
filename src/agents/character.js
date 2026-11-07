@@ -171,10 +171,10 @@ function planPose({ object, base, count }) {
 }
 
 const inspected = new Map();
-function inspectRig(params) {
-  const key = JSON.stringify(params);
+function inspectRig(params, style = 'realistic') {
+  const key = style + JSON.stringify(params);
   if (inspected.has(key)) return inspected.get(key);
-  const { obj } = buildModel('human', params);
+  const { obj } = buildModel('human', params, undefined, style);
   const stats = measure(obj);
   assert(stats.finite, 'non-finite transforms');
   assert(typeof obj.userData.rig === 'function', 'missing rig');
@@ -288,7 +288,7 @@ export class CharacterAgent extends Agent {
         new SubAgent({
           name: 'rig-inspector',
           description: 'Builds the planned character in three.js: feet on ground, height matches plan, every rig mode is finite.',
-          run: (params) => inspectRig(params),
+          run: (input) => (input.params ? inspectRig(input.params, input.style) : inspectRig(input)),
           test: () => {
             const r = inspectRig({ height: 1.8, headUnits: 7.5, outfit: 'armor', hat: 'helmet', prop: 'swordshield' });
             assert(Math.abs(r.minY) < 0.05, `feet at ${r.minY}`);
@@ -315,14 +315,14 @@ export class CharacterAgent extends Agent {
     o.params = { archetype, ...anatomy, ...appearance, ...clothes, pose: explicit.pose ?? pose.pose, ...(o.count > 12 ? { lod: 'low' } : {}) };
     o.animation = pose.animation;
     o.material = {}; // colours were consumed by the wardrobe; the model owns its materials
-    const r = await this.delegate('rig-inspector', o.params, ctx);
+    const r = await this.delegate('rig-inspector', { params: o.params, style: o.style }, ctx);
     if (Math.abs(r.minY) > 0.08) ctx.warn(`${o.id}: feet ${r.minY} m off the ground`);
     o.sheet = sheet(o.params, o.animation);
     return o;
   }
 
   async handle(spec, ctx) {
-    for (const o of spec.objects) if (o.model === 'human') await this.plan(o, ctx);
+    for (const o of spec.objects) if (o.model === 'human') { o.style = spec.style; await this.plan(o, ctx); }
     return spec;
   }
 

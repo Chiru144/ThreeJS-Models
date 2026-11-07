@@ -1,6 +1,6 @@
 # ThreeJS Forge MCP
 
-An MCP server that turns a sentence (or a JSON spec) into a **validated, modern three.js scene**: a self-contained `index.html` you can open, plus a reusable `scene.js` module you can drop into any app (Vite, React, Next, plain JS).
+An MCP server that turns a sentence (or a JSON spec) into a **validated, modern three.js scene with realistic, sculpted models**: a self-contained `index.html` you can open, plus a reusable `scene.js` module you can drop into any app (Vite, React, Next, plain JS).
 
 Inside, an **orchestrator** routes every request through **12 agents and 44 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine. Dedicated **character** and **creature** agents plan people, animals and fantasy creatures in detail before they are built.
 
@@ -15,7 +15,7 @@ git clone https://github.com/chiru144/threejs-models.git
 cd threejs-models
 npm install
 npm run doctor        # checks every agent + sub-agent in YOUR environment
-npm test              # full test suite (127 tests)
+npm test              # full test suite (136 tests, ~4 min: every archetype and species is sculpted)
 ```
 
 ### Connect it to your MCP client
@@ -49,7 +49,7 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 | `forge_build` | Prompt or spec → `index.html` + `scene.js` + `spec.json`, validated in real three.js | ~450 chars |
 | `forge_plan` | Prompt → compact JSON spec (no code). Edit it, then pass it to `forge_build` | ~300 chars |
 | `forge_character` | One person, animal or creature from a description → design sheet + rigged `model.js` + studio preview | ~800 chars |
-| `forge_model` | One model (`tree`, `car`, `knight`, `horse`, `owl`…) as `createModel(THREE, params)` | code, or a path with `out_file` |
+| `forge_model` | One model (`tree`, `car`, `knight`, `horse`, `owl`…) as `createModel(THREE, params)`; `style: stylized` for low-poly | code, or a path with `out_file` |
 | `forge_review` | Reviews *your* three.js code: removed APIs, per-frame allocations, shadows, colour space, resize, pixel ratio. Score + fixes | one line per finding |
 | `forge_catalog` | Models + params, characters, creatures, materials, colours, lighting, animations, budgets, agents, spec example. Request one `section` at a time | 0.3–3 KB |
 | `forge_health` | Runs every agent and sub-agent self-test plus an end-to-end build | ~1 KB |
@@ -79,11 +79,34 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 | **validator** | syntax-validator · runtime-validator · budget-checker · best-practice-linter | Parses the output, **imports and runs it against real three.js in Node**, runs `update()` and `dispose()`, measures draw calls and triangles, lints |
 | **reviewer** | syntax-checker · api-auditor · performance-auditor · correctness-auditor | Same rule engine, applied to your code |
 
+## Realism
+
+![Realistic characters and creatures](docs/realistic.png)
+
+People, animals, trees and rocks are **sculpted**, not stacked from primitives:
+
+- **Sculpting engine:** each model is defined by anatomy (skull, cheekbones, brow ridge, eyelids, nostrils, lips, ears; ribcage, pecs, deltoids, biceps, calves, kneecaps; five-finger hands). These shapes are smoothly blended into one continuous mesh with signed-distance functions. The surface is extracted with surface nets, then projected onto the exact surface. It gets analytic normals and ambient occlusion baked into the creases.
+- **Real skinning:** every person and creature is a `SkinnedMesh` on a skeleton. People have 17 bones. Quadrupeds have legs with elbow/carpus/hock/fetlock joints, plus a jointed neck, tail, wings and trunk. Fish swim with a 4-bone spine wave, and snakes slither on a 10-bone chain. Joints bend smoothly, with weights computed from the anatomy.
+- **Clothing follows the body:** garments are the anatomy inflated and cut at hems, with fold detail, so they fit any body. Only exposed skin is sculpted, which saves triangles.
+- **Materials:**
+  - **Skin:** physical material with sheen and natural tint variation (lips, cheeks, nose).
+  - **Eyes:** glossy, with a procedural iris and species-correct pupils (round, slit or horizontal bar).
+  - **Hair:** sheen with strand grooves and streaks.
+  - **Fur:** coats painted with countershading, tiger and zebra stripes, giraffe patches, cow spots and natural variation.
+  - **Other surfaces:** fish scales with iridescence, keratin hooves and horns, chitin, bark, leaves and lichen-covered rock.
+- **Rendering:**
+  - **Sky:** a physical sky lights outdoor scenes through image-based lighting.
+  - **Post-processing:** GTAO ambient occlusion in a multisampled composer, and bloom for emissives.
+  - **Ground:** procedural textures with normal maps (grass, sand, snow, cobblestone, wood).
+  - **Grass:** tens of thousands of wind-swept blades in one draw call.
+- **Performance:** a detailed person is about 85k triangles and 8–16 draw calls, and takes about 1 s to sculpt the first time. Identical shapes are cached, so crowds share geometry. Crowds use a lighter level of detail. Generated pages show a "sculpting models…" screen while they build.
+- **Prefer low-poly?** Say "low poly", "cartoon" or "stylized", or set `"style": "stylized"` in a spec or on `forge_model`. That style uses the earlier lightweight models, which are instant and tiny.
+
 ## Characters, animals and creatures
 
-![Characters and creatures](docs/characters.png)
+![Characters and creatures (stylized style)](docs/characters.png)
 
-*"a knight in golden armor with a red cape riding a white horse" · "an old wizard with a long white beard waving" · "a woman with long red hair in a green dress walking her dog" · "a red dragon" · "an elephant" · "a tiger" · "an owl" · "a park with 20 people walking and 2 dogs"*
+*Stylized style: "a knight in golden armor with a red cape riding a white horse" · "an old wizard with a long white beard waving" · "a woman with long red hair in a green dress walking her dog" · "a red dragon" · "an elephant" · "a tiger" · "an owl" · "a park with 20 people walking and 2 dogs"*
 
 Describe people the way you'd brief an artist:
 
@@ -101,7 +124,7 @@ forge_character  "a tall old woman with long grey hair, blue eyes and glasses in
 - **Relationships:** "a knight **riding** a horse" seats the rider in a saddle, and the rider moves with the mount. "a girl **walking her** dog" keeps the dog beside her as she walks.
 - **Crowds:** "20 people" each get their own look (sex, skin, hair, clothes). Large crowds are instanced from a few looks with a lighter mesh.
 - **Themes:** farm, savanna/safari, jungle, underwater/reef/aquarium, medieval, castle, park, street, crowd, zoo and graveyard.
-- **Rigged output:** every person and creature is a jointed model. `model.userData.rig(seconds, 'walk')` animates it in your own app, and the generated scenes already do this. Parts are merged per joint, so a fully detailed person costs about 20–30 draw calls.
+- **Rigged output:** every person and creature is a skinned model. `model.userData.rig(seconds, 'walk')` animates it in your own app, and the generated scenes already do this.
 
 ## Token efficiency
 
@@ -135,7 +158,8 @@ forge_character  "a tall old woman with long grey hair, blue eyes and glasses in
 ```
 
 - People and animals take a `description` (read by the character/creature agents) and/or exact `params`. `forge_plan` returns the fully planned params, so you can tweak one (say, `"hair": "bun"`) and rebuild.
-- `quality` is `low`, `medium` or `high`. It sets pixel-ratio cap, antialiasing, shadow map size, and triangle and draw-call budgets.
+- `quality` is `low`, `medium` or `high`. It sets the pixel-ratio cap, antialiasing, shadow map size, grass density, post-processing, and the triangle and draw-call budgets (0.5M / 2.5M / 8M triangles).
+- `style` is `realistic` (the default) or `stylized`.
 - `ground` is `grass`, `sand`, `snow`, `stone`, `wood`, `matte`, `metal` or `none`.
 - Every build also writes `spec.json`, so any scene can be rebuilt or tweaked exactly. Output is deterministic (seeded).
 
@@ -181,8 +205,9 @@ src/core/orchestrator.js routes tasks through agents, caching, file output
 src/core/agent.js        Agent / SubAgent base classes (delegate, trace, self-test)
 src/core/sandbox.js      runs models in real three.js (Node) to measure them
 src/agents/*.js          the 12 agents and their sub-agents (character.js, creature.js = specialists)
-src/library/*.js         models, characters (human factory + archetypes), creatures (species + 5 body plans),
-                         materials, lighting/animation/quality presets, review rules
+src/library/*.js         helpers (sculpt engine, rig kit, ground textures, grass), human.js (sculpted human),
+                         beasts.js (sculpted creatures), props.js (sculpted rocks/trees), characters.js + creatures.js
+                         (archetypes, species, stylized factories), materials, presets, review rules
 bin/doctor.js            environment check
 test/*.test.js           test suite
 ```

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { MODELS } from '../library/models.js';
 import * as H from '../library/helpers.js';
 
-const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize, H.mergeParts].map((f) => f.toString()).join('\n');
+const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize, H.mergeParts, H.sculpt, H.rigKit, H.surfaceTex, H.grassField].map((f) => f.toString()).join('\n');
 
 export function makeMaterialCache() {
   const mats = new Map();
@@ -15,11 +15,15 @@ export function makeMaterialCache() {
   return { M, mats };
 }
 
-export function buildModel(name, params = {}, terrain = { amp: 0, flats: [] }) {
+const factories = new Map();
+export function buildModel(name, params = {}, terrain = { amp: 0, flats: [] }, style = 'realistic') {
   const def = MODELS[name];
   if (!def) throw new Error(`unknown model ${name}`);
+  const fn = style === 'stylized' && def.stylizedFn ? def.stylizedFn : def.fn;
+  const key = `${name}|${style}|${JSON.stringify(terrain)}`;
   // eslint-disable-next-line no-new-func
-  const factory = new Function('THREE', 'TERRAIN', `${HELPERS}\nreturn (${def.fn.toString()});`)(THREE, terrain);
+  if (!factories.has(key)) factories.set(key, new Function('THREE', 'TERRAIN', `${HELPERS}\nreturn (${fn.toString()});`)(THREE, terrain));
+  const factory = factories.get(key);
   const { M, mats } = makeMaterialCache();
   const obj = factory(THREE, M, params, undefined);
   return { obj, mats };

@@ -72,9 +72,9 @@ export const ANIMATIONS = {
 };
 
 export const QUALITY = {
-  low: { pixelRatioCap: 1, antialias: false, shadowMapSize: 1024, shadows: false, triBudget: 150_000, drawBudget: 100, instanceThreshold: 3 },
-  medium: { pixelRatioCap: 1.5, antialias: true, shadowMapSize: 2048, shadows: true, triBudget: 750_000, drawBudget: 300, instanceThreshold: 4 },
-  high: { pixelRatioCap: 2, antialias: true, shadowMapSize: 4096, shadows: true, triBudget: 3_000_000, drawBudget: 800, instanceThreshold: 6 },
+  low: { pixelRatioCap: 1, antialias: false, shadowMapSize: 1024, shadows: false, triBudget: 500_000, drawBudget: 100, instanceThreshold: 3 },
+  medium: { pixelRatioCap: 1.5, antialias: true, shadowMapSize: 2048, shadows: true, triBudget: 2_500_000, drawBudget: 300, instanceThreshold: 4 },
+  high: { pixelRatioCap: 2, antialias: true, shadowMapSize: 4096, shadows: true, triBudget: 8_000_000, drawBudget: 800, instanceThreshold: 6 },
 };
 
 export const THREE_VERSION = '0.187.0';

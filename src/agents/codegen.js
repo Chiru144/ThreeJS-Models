@@ -24,7 +24,7 @@ const indent = (src, pad = '  ') => src.split('\n').map((l) => (l ? pad + l : l)
 const matExpr = (m) => (m ? `M('${m.key}', ${lit(m.props)}${m.type !== 'MeshStandardMaterial' ? `, '${m.type}'` : ''})` : 'undefined');
 
 function helperBlock(needs) {
-  const order = ['rng', 'heightAt', 'scatter', 'instanceize', 'mergeParts'];
+  const order = ['rng', 'heightAt', 'scatter', 'instanceize', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField'];
   return order.filter((h) => needs.has(h)).map((h) => indent(H[h].toString())).join('\n');
 }
 
@@ -48,7 +48,9 @@ function emitModule(b) {
   // lights
   const [sky, gnd, hi] = lighting.rig.hemi;
   push('  // Lighting');
-  push(`  scene.add(new THREE.HemisphereLight(${hex(sky)}, ${hex(gnd)}, ${num(hi)}));`);
+  // outdoor scenes get image-based light from the physical sky, so the hemisphere fill is reduced
+  const skyLit = ['daylight', 'sunset'].includes(lighting.rig.preset);
+  push(`  scene.add(new THREE.HemisphereLight(${hex(sky)}, ${hex(gnd)}, ${num(skyLit ? hi * 0.25 : hi)}));`);
   for (const l of lighting.lights) {
     push('  {');
     if (l.type === 'DirectionalLight') {
@@ -71,7 +73,12 @@ function emitModule(b) {
 
   if (env.autoGround && materials.ground) {
     push('  // Ground');
-    push(`  scene.add(makeGround(THREE, M, { size: ${env.groundSize} }, ${matExpr(materials.ground)}));`);
+    push(`  scene.add(makeGround(THREE, M, { size: ${env.groundSize}, kind: '${spec.environment.ground}' }, ${matExpr(materials.ground)}));`);
+    if (spec.environment.ground === 'grass' && spec.quality !== 'low') {
+      needs.add('grassField').add('rng');
+      const n = spec.quality === 'high' ? 45000 : 16000;
+      push(`  scene.add(grassField(${n}, ${num(Math.min(28, layout.extent * 1.3 + 6))}, 0x6f9a3e, ${spec.seed}, ${lit(layout.occupied)}, ticks)); // wind-swept blades, 1 draw call`);
+    }
   }
 
   const anyAnim = animation.bindings.length > 0;
@@ -83,10 +90,11 @@ function emitModule(b) {
     push(`  const animate = (o, type, speed, amp, phase${loco ? ', stride = 0.5, inPlace = false' : ''}) => {
     const r = Math.hypot(o.position.x, o.position.z);
     anims.push({ o, type, speed, amp, phase, y: o.position.y, s: o.scale.x, r: r || 4, a: Math.atan2(o.position.z, o.position.x), rig: (o.children[0] || o).userData.rig${loco ? `,
-      R: inPlace ? 0 : Math.max(r, stride * 2.5, 1.2), lin: (LIN[type] ?? 0) * Math.min(1.6, Math.max(0.2, stride * 2.2)), lift: Math.max(1.2, stride * 3)` : ''} });
+      R: inPlace ? 0 : Math.max(r, stride * 2.5, 1.2), lin: (LIN[type] ?? 0) * Math.min(1.6, Math.max(0.2, stride * 2.2)), lift: inPlace ? stride * 0.6 : Math.max(1.2, stride * 3)` : ''} });
   };`);
   }
   const scattered = layout.items.some((i) => i.mode === 'scatter');
+  L.unshift('  const ticks = [];');
   if (scattered) push(`  const occupied = ${lit(layout.occupied)};`);
   push('  const place = (child, x, y, z, ry, s) => { const g = new THREE.Group(); g.add(child); g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(s); return g; };');
 
@@ -121,7 +129,7 @@ function emitModule(b) {
     const mat = matExpr(materials.byId[o.id]);
     const a = animById[o.id];
     const variants = MODELS[o.model].variants && o.params.vary;
-    const stride = LOCOMOTION_SPEEDS[a?.type] ? `, ${num(Math.round(sizeOf(o).footprint * 100) / 100)}` : '';
+    const stride = LOCOMOTION_SPEEDS[a?.type] ? `, ${num(Math.round(sizeOf(o).footprint * 100) / 100)}${o.inPlace ? ', true' : ''}` : '';
     const anim = (target, phase) => (a ? `animate(${target}, '${a.type}', ${num(a.speed)}, ${num(a.amp ?? 0)}, ${phase}${stride});` : '');
     const P = (i) => (variants ? `{ ...p, variant: ${i} }` : 'p');
     push('');
@@ -180,6 +188,8 @@ function emitModule(b) {
     push('  }');
   }
   if (scattered) needs.add('scatter').add('rng');
+  if (needs.has('grassField')) needs.add('surfaceTex');
+  if (env.autoGround && materials.ground && !['matte', 'metal'].includes(spec.environment.ground)) needs.add('surfaceTex');
   if (lighting.enabled) {
     push('');
     push('  scene.traverse((o) => { if (o.isMesh) { o.castShadow = !o.userData.noCast && !o.userData.noShadow; o.receiveShadow = !o.userData.noShadow; } });');
@@ -190,9 +200,14 @@ function emitModule(b) {
     ? `\n  scene.fog = new THREE.Fog(${hex(lighting.rig.fog)}, ${num(Math.max(20, layout.extent * 1.5))}, ${num(Math.max(80, layout.extent * 5 + 40))});` : '';
   const usedFactories = factories.filter((f) => spec.objects.some((o) => o.model === f.model) || (f.model === 'ground' && env.autoGround));
   const q = QUALITY[spec.quality];
+  const key = lighting.lights.find((l) => l.type === 'DirectionalLight');
+  const outdoor = ['daylight', 'sunset'].includes(lighting.rig.preset);
   const settings = {
     quality: spec.quality, shadows: lighting.enabled, exposure: lighting.rig.exposure, envMap: true, envIntensity: lighting.rig.envIntensity,
     pixelRatioCap: q.pixelRatioCap, antialias: q.antialias, target: camera.target, maxDistance: camera.maxDistance, maxPolar: camera.maxPolar,
+    // physically based sky (outdoor) + post-processing (ambient occlusion, bloom)
+    sky: outdoor && key ? { sun: key.dir, turbidity: lighting.rig.preset === 'sunset' ? 8 : 4, rayleigh: lighting.rig.preset === 'sunset' ? 3 : 1.2, mie: 0.005, mieG: 0.8, bg: lighting.rig.preset === 'sunset' ? 0.3 : 0.3, env: lighting.rig.preset === 'sunset' ? 0.16 : 0.18 } : null,
+    post: { ao: spec.quality !== 'low', aoRadius: Math.max(0.15, Math.min(1.2, layout.heroHeight * 0.25)), bloom: spec.quality === 'high' || ['neon', 'night'].includes(lighting.rig.preset) },
   };
 
   return `// ${spec.title}
@@ -222,7 +237,7 @@ ${animation.update.replace('function update', 'function update')}
     });
   }
 
-  return { scene, camera, update, dispose, settings: ${lit(settings)} };
+  return { scene, camera, update: (t, dt) => { update(t, dt); for (const f of ticks) f(t, dt); }, dispose, settings: ${lit(settings)} };
 }
 `;
 }
@@ -251,13 +266,22 @@ function emitHtml({ title, moduleSource }) {
 </head>
 <body>
 <div id="hint">drag to orbit · scroll to zoom · right-drag to pan</div>
+<div id="loading" style="position:fixed;inset:0;display:grid;place-items:center;font:14px system-ui,sans-serif;color:#fffc;background:#111">sculpting models…</div>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 ${inline}
+await new Promise((r) => requestAnimationFrame(() => setTimeout(r))); // let the loading screen paint first
 const app = createScene(THREE, { aspect: innerWidth / innerHeight });
+document.getElementById('loading').remove();
 const { scene, camera, settings } = app;
 
 const renderer = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
@@ -265,16 +289,49 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, settings.pixelRatioCap));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = settings.exposure;
+renderer.toneMappingExposure = settings.exposure * (settings.sky ? 0.85 : 1);
 renderer.shadowMap.enabled = settings.shadows;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.appendChild(renderer.domElement);
 
-if (settings.envMap) {
+if (settings.sky) {
+  // physically based sky: used as the background and to light the scene (image-based lighting)
+  const sky = new Sky();
+  sky.scale.setScalar(1000);
+  const u = sky.material.uniforms;
+  u.turbidity.value = settings.sky.turbidity; u.rayleigh.value = settings.sky.rayleigh;
+  u.mieCoefficient.value = settings.sky.mie; u.mieDirectionalG.value = settings.sky.mieG;
+  u.sunPosition.value.fromArray(settings.sky.sun).normalize();
+  const envScene = new THREE.Scene();
+  envScene.add(sky);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromScene(envScene, 0).texture;
+  scene.background = env;
+  scene.backgroundIntensity = settings.sky.bg;
+  scene.environment = env;
+  scene.environmentIntensity = settings.sky.env;
+  pmrem.dispose();
+} else if (settings.envMap) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = settings.envIntensity;
   pmrem.dispose();
+}
+
+let composer = null;
+if (settings.post.ao || settings.post.bloom) {
+  const target = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: settings.antialias ? 4 : 0 });
+  composer = new EffectComposer(renderer, target);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.addPass(new RenderPass(scene, camera));
+  if (settings.post.ao) {
+    const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    ao.updateGtaoMaterial({ radius: settings.post.aoRadius, distanceExponent: 1, thickness: 1, scale: 1 });
+    ao.blendIntensity = 0.8;
+    composer.addPass(ao);
+  }
+  if (settings.post.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.22, 0.4, 3.0)); // only emissive highlights bloom
+  composer.addPass(new OutputPass());
 }
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -288,6 +345,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer?.setSize(innerWidth, innerHeight);
 });
 
 const timer = new THREE.Timer();
@@ -296,7 +354,7 @@ renderer.setAnimationLoop((time) => {
   timer.update(time);
   app.update(timer.getElapsed(), Math.min(timer.getDelta(), 0.1));
   controls.update();
-  renderer.render(scene, camera);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 });
 </script>
 </body>

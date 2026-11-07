@@ -27,6 +27,9 @@ const THEMES = {
   'dining room': { lighting: 'studio', ground: 'wood', add: [['table', 1], ['chair', 4], ['vase', 1]] },
   cave: { lighting: 'night', ground: 'stone', add: [['crystal', 20], ['rock', 15]] },
   fantasy: { lighting: 'sunset', ground: 'grass', add: [['crystal', 10], ['mushroom', 15]] },
+  meadow: { lighting: 'daylight', ground: 'grass', add: [['oak', 6], ['rock', 5]] },
+  field: { lighting: 'daylight', ground: 'grass', add: [['oak', 4]] },
+  countryside: { lighting: 'daylight', ground: 'grass', add: [['oak', 10], ['house', 2], ['rock', 6]] },
   farm: { lighting: 'daylight', ground: 'grass', add: [['house', 2], ['cow', 3], ['pig', 3], ['sheep', 5], ['chicken', 6], ['farmer', 1], ['tree', 8]] },
   savanna: { lighting: 'sunset', ground: 'sand', add: [['lion', 2], ['elephant', 2], ['giraffe', 3], ['zebra', 5], ['oak', 6]] },
   safari: { lighting: 'sunset', ground: 'sand', add: [['lion', 2], ['elephant', 2], ['giraffe', 3], ['zebra', 5], ['oak', 6]] },
@@ -70,6 +73,7 @@ function parseIntent(prompt) {
 
   for (const [name, l] of Object.entries(LIGHTING)) if (!out.lighting && found(l.words)) out.lighting = name;
   for (const [q, words] of Object.entries(QUALITY_WORDS)) if (!out.quality && found(words)) out.quality = q;
+  if (found(['stylized', 'stylised', 'cartoon', 'cartoony', 'toon', 'low poly', 'low-poly', 'lowpoly', 'blocky', 'cute', 'toy', 'chibi'])) out.style = 'stylized';
   for (const t of Object.keys(THEMES).sort((a, b) => b.length - a.length)) if (!out.theme && found([t])) out.theme = t;
   if (found(['terrain', 'hills', 'hilly', 'mountains', 'landscape'])) out.terrain = true;
   for (const g of ['sand', 'snow', 'grass', 'stone']) if (!out.ground && found([`${g}y? ground`, `${g}y? floor`])) out.ground = g;
@@ -156,7 +160,7 @@ function expandTheme(intent) {
   if (!objects.some((o) => !['stars', 'ground', 'terrain', 'water'].includes(o.model))) {
     objects.push({ model: 'torusKnot', count: 1, params: {}, preset: 'metal', color: 'gold', defaulted: true });
   }
-  return { objects, lighting, ground, quality: intent.quality || 'medium' };
+  return { objects, lighting, ground, quality: intent.quality || 'medium', style: intent.style };
 }
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48).replace(/-+$/, '') || 'scene';
@@ -190,6 +194,7 @@ function normalizeSpec(raw, ctx) {
       position: Array.isArray(o.position) && o.position.length === 3 && o.position.every(Number.isFinite) ? o.position : null,
       rotationY: Number(o.rotationY) || 0,
       ...(o.description ? { description: String(o.description).slice(0, 400) } : {}),
+      ...(o.inPlace ? { inPlace: true } : {}),
     });
   });
   assert(objects.length > 0, 'spec has no valid objects');
@@ -198,6 +203,7 @@ function normalizeSpec(raw, ctx) {
     title: String(raw.title || 'Three.js Scene').slice(0, 80),
     slug: slug(raw.title || 'scene'),
     quality,
+    style: raw.style === 'stylized' ? 'stylized' : 'realistic',
     seed: Number.isInteger(raw.seed) ? raw.seed : 1337,
     lighting: { preset: lighting, shadows: raw.lighting?.shadows ?? QUALITY[quality].shadows },
     environment: {
@@ -261,6 +267,7 @@ export class PlannerAgent extends Agent {
     return this.delegate('spec-normalizer', {
       title: title.charAt(0).toUpperCase() + title.slice(1),
       quality: plan.quality,
+      style: plan.style,
       lighting: plan.lighting,
       environment: { ground: plan.ground },
       objects: plan.objects.map((o) => ({ model: o.model, count: o.count, params: o.params, color: o.color, preset: o.preset, animation: o.animation, scale: o.scale, description: o.description })),

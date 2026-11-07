@@ -4,16 +4,19 @@ import { buildModel, measure } from '../core/sandbox.js';
 
 const fnName = (name) => `make${name[0].toUpperCase()}${name.slice(1)}`;
 
-function emitFactory(name, kinds) {
+function emitFactory(name, kinds, style = 'realistic') {
   const def = MODELS[name];
   assert(def, `unknown model ${name}`);
   assert(kinds.includes(def.kind), `${name} is a ${def.kind} model`);
-  const source = def.fn.toString();
+  const fn = style === 'stylized' && def.stylizedFn ? def.stylizedFn : def.fn;
+  const source = fn.toString();
   return {
     model: name,
-    fnName: fnName(name),
+    fnName: fn.name,
+    style,
     source,
-    needs: ['rng', 'heightAt', 'mergeParts'].filter((h) => new RegExp(`\\b${h}\\(`).test(source)),
+    // helpers the factory calls, plus their own dependencies (rigKit -> sculpt)
+    needs: ((n) => (n.includes('rigKit') && !n.includes('sculpt') ? [...n, 'sculpt'] : n))(['rng', 'heightAt', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField'].filter((h) => new RegExp(`\\b${h}\\b`).test(source))),
   };
 }
 
@@ -42,7 +45,7 @@ export class ModelerAgent extends Agent {
       subagents: Object.entries(CATEGORY).map(([name, c]) => new SubAgent({
         name,
         description: c.description,
-        run: (model) => emitFactory(model, c.kinds),
+        run: (input) => (typeof input === 'string' ? emitFactory(input, c.kinds) : emitFactory(input.model, c.kinds, input.style)),
         test: categoryTest(c.sample),
       })),
     });
@@ -54,9 +57,9 @@ export class ModelerAgent extends Agent {
   }
 
   /** Returns factories for every distinct model used, routed to the right sub-agent. */
-  async handle(models, ctx) {
+  async handle(models, ctx, style = 'realistic') {
     const out = [];
-    for (const m of new Set(models)) out.push(await this.delegate(this.subFor(m), m, ctx));
+    for (const m of new Set(models)) out.push(await this.delegate(this.subFor(m), { model: m, style }, ctx));
     return out;
   }
 }

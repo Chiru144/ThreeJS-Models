@@ -101,7 +101,7 @@ export class Orchestrator {
     await A.optimizer.handle(spec, ctx);
     const compose = await A.composer.handle(spec, ctx);
     const models = spec.objects.map((o) => o.model).concat(compose.env.autoGround ? ['ground'] : []);
-    const factories = await A.modeler.handle(models, ctx);
+    const factories = await A.modeler.handle(models, ctx, spec.style);
     const animation = await A.animation.handle(spec, ctx);
     const lighting = await A.lighting.handle({ spec, extent: compose.layout.extent }, ctx);
     const { module, html } = await A.codegen.handle({ spec, factories, materials, compose, lighting, animation }, ctx);
@@ -124,7 +124,7 @@ export class Orchestrator {
     };
   }
 
-  async model({ model, params = {}, preset, color, out_file }) {
+  async model({ model, params = {}, preset, color, out_file, style = 'realistic' }) {
     const ctx = new TaskContext({ type: 'model' });
     const alias = MODEL_ALIASES.get(String(model).toLowerCase());
     if (!alias) throw new Error(`Unknown model "${model}". Available: ${Object.keys(MODELS).join(', ')}`);
@@ -134,13 +134,14 @@ export class Orchestrator {
     let sheet;
     if (MODELS[name].rigged) {
       const o = { id: `${name}1`, model: name, count: 1, params: clean, description: String(model), material: material0, scale: 1 };
+      o.style = style;
       await (name === 'human' ? this.agents.character : this.agents.creature).plan(o, ctx);
       clean = o.params;
       sheet = o.sheet;
       if (preset || color != null) material0 = { preset, color: resolveColor(color) };
       else material0 = o.material;
     }
-    const [factory] = await this.agents.modeler.handle([name], ctx);
+    const [factory] = await this.agents.modeler.handle([name], ctx, style);
     const mat0 = await this.agents.material.delegate('preset-mapper', { model: name, ...material0 }, ctx);
     const material = await this.agents.material.delegate('material-dedup', mat0, ctx);
     const source = await this.agents.codegen.delegate('model-emitter', { model: name, factory, material, params: clean, sheet }, ctx);
@@ -163,13 +164,13 @@ export class Orchestrator {
     if (!subject) throw new Error(`No person, animal or creature recognised in "${description}". See forge_catalog section=characters or section=creatures.`);
     const one = { ...subject, count: 1, position: null };
     const previewSpec = {
-      title: spec.title, quality: 'high', seed: spec.seed,
+      title: spec.title, quality: 'high', seed: spec.seed, style: spec.style,
       lighting: { preset: spec.lighting.preset === 'daylight' ? 'studio' : spec.lighting.preset },
       environment: { ground: spec.environment.ground === 'none' ? 'none' : 'matte' },
-      objects: [{ model: one.model, params: one.params, animation: one.animation, scale: one.scale, color: one.material.color, preset: one.material.preset }],
+      objects: [{ model: one.model, params: one.params, animation: one.animation, scale: one.scale, color: one.material.color, preset: one.material.preset, inPlace: true }],
     };
     const build = await this.build({ spec: previewSpec, write_files, out_dir: out_dir || path.join('threejs-output', `${spec.slug}`) });
-    const factory = (await this.agents.modeler.handle([one.model], ctx))[0];
+    const factory = (await this.agents.modeler.handle([one.model], ctx, spec.style))[0];
     const mat0 = await this.agents.material.delegate('preset-mapper', { model: one.model, ...one.material }, ctx);
     const material = await this.agents.material.delegate('material-dedup', mat0, ctx);
     const modelSrc = await this.agents.codegen.delegate('model-emitter', { model: one.model, factory, material, params: one.params, sheet: one.sheet }, ctx);
@@ -255,7 +256,7 @@ const SPEC_EXAMPLE = {
 export function compactSpec(spec) {
   const hexStr = (n) => `#${n.toString(16).padStart(6, '0')}`;
   return {
-    title: spec.title, quality: spec.quality, seed: spec.seed,
+    title: spec.title, quality: spec.quality, seed: spec.seed, ...(spec.style === 'stylized' ? { style: 'stylized' } : {}),
     lighting: spec.lighting,
     environment: Object.fromEntries(Object.entries(spec.environment).filter(([, v]) => v !== undefined)),
     objects: spec.objects.map((o) => {

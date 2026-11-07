@@ -91,10 +91,10 @@ function planBehavior({ plan, species, object, count }) {
 }
 
 const inspected = new Map();
-function inspect({ model, params }) {
-  const key = model + JSON.stringify(params);
+function inspect({ model, params, style = 'realistic' }) {
+  const key = style + model + JSON.stringify(params);
   if (inspected.has(key)) return inspected.get(key);
-  const { obj } = buildModel(model, params);
+  const { obj } = buildModel(model, params, undefined, style);
   assert(typeof obj.userData.rig === 'function', 'missing rig');
   for (const mode of ['idle', 'walk', 'run', 'fly', 'swim', 'slither']) { obj.userData.rig(0.987, mode); assert(measure(obj).finite, `rig mode ${mode} produced NaN`); }
   obj.userData.rig(0, 'idle');
@@ -184,13 +184,13 @@ export class CreatureAgent extends Agent {
     o.scale *= morph.scale;
     o.animation = await this.delegate('behavior-planner', { plan: o.model, species, object: o, count: o.count }, ctx);
     o.material = coat.preset ? { preset: coat.preset, color: o.material?.color } : {};
-    await this.delegate('rig-inspector', { model: o.model, params: o.params }, ctx);
+    await this.delegate('rig-inspector', { model: o.model, params: o.params, style: o.style }, ctx);
     o.sheet = sheet(o, morph.scale);
     return o;
   }
 
   async handle(spec, ctx) {
-    for (const o of spec.objects) if (PLAN_MODELS.has(o.model)) await this.plan(o, ctx);
+    for (const o of spec.objects) if (PLAN_MODELS.has(o.model)) { o.style = spec.style; await this.plan(o, ctx); }
     return spec;
   }
 }

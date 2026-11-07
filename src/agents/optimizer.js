@@ -4,10 +4,10 @@ import { QUALITY } from '../library/presets.js';
 import { buildModel, measure } from '../core/sandbox.js';
 
 const costCache = new Map();
-function estimateCost({ model, params }) {
-  const key = `${model}:${JSON.stringify(params)}`;
+function estimateCost({ model, params, style }) {
+  const key = `${model}:${style}:${JSON.stringify(params)}`;
   if (!costCache.has(key)) {
-    const { obj } = buildModel(model, params);
+    const { obj } = buildModel(model, params, undefined, style);
     const s = measure(obj);
     costCache.set(key, { triangles: s.triangles, parts: s.drawCalls, lights: s.lights });
   }
@@ -83,7 +83,7 @@ export class OptimizerAgent extends Agent {
           test: () => {
             const objs = [{ id: 'x', count: 1000, instanced: true, cost: { triangles: 10000, parts: 1, lights: 0 } }];
             const r = planBudget({ objects: objs, quality: 'low' });
-            assert(objs[0].count === 15 && r.triangles <= QUALITY.low.triBudget, 'budget trim');
+            assert(objs[0].count === Math.floor(1000 * QUALITY.low.triBudget / 1e7) && r.triangles <= QUALITY.low.triBudget, 'budget trim');
           },
         }),
       ],
@@ -92,7 +92,7 @@ export class OptimizerAgent extends Agent {
 
   async handle(spec, ctx) {
     for (const o of spec.objects) {
-      o.cost = await this.delegate('cost-estimator', o, ctx);
+      o.cost = await this.delegate('cost-estimator', { ...o, style: spec.style }, ctx);
       const adv = await this.delegate('instancing-advisor', { object: o, quality: spec.quality }, ctx);
       o.instanced = adv.instanced;
       if (adv.reason && adv.instanced) ctx.note(`${o.id}: ${adv.reason}.`);

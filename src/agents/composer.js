@@ -30,7 +30,7 @@ function planLayout(spec) {
     }
     heroHeight = Math.max(heroHeight, sizeOf(o).height);
     // moving heroes loop around the centre: keep their whole path in frame
-    if (ANIMATIONS[o.animation?.type]?.locomotion) {
+    if (ANIMATIONS[o.animation?.type]?.locomotion && !o.inPlace) {
       const R = Math.max(...positions.map((q) => Math.abs(q[0])), fp * 2.5, 1.2);
       heroExtent = Math.max(heroExtent, R + fp);
       if (o.animation.type === 'fly') heroHeight = Math.max(heroHeight, Math.max(1.2, fp * 3) + sizeOf(o).height);
