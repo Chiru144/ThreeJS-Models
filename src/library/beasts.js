@@ -57,14 +57,16 @@ function makeQuadruped(THREE, M, p, main) {
   );
   legs.forEach((l, i) => {
     const u = `u${i}`, m = `m${i}`, f = `f${i}`;
+    // a leg never reaches the midline: left and right must not fuse under the body (they move in opposition)
+    const cap = (r, x) => Math.min(r, Math.abs(x) * 0.78);
     if (l.front) {
       coat.push(E(add(l.top, [l.sx * BW * 0.04, BH * 0.12, 0]), [BW * 0.13, BH * 0.42, L * 0.11], { bone: u, k: kk * 0.8, rot: [-0.3, 0, 0] }));
-      coat.push(RC(l.top, l.mid, LR * 2.1, LR * 1.55, { bone: u, k: kk * 0.6 }));
-      coat.push(RC(l.mid, l.low, LR * 1.6, LR * 0.95, { bone: m, k: LR * 0.8 }));
+      coat.push(RC(l.top, l.mid, cap(LR * 2.1, l.top[0]), cap(LR * 1.55, l.mid[0]), { bone: u, k: kk * 0.6 }));
+      coat.push(RC(l.mid, l.low, cap(LR * 1.6, l.mid[0]), LR * 0.95, { bone: m, k: LR * 0.8 }));
     } else {
-      coat.push(E(lerp(l.top, l.mid, 0.4), [BW * 0.21, BH * 0.5, L * 0.15], { bone: u, k: kk * 0.7 }));
-      coat.push(RC(l.top, l.mid, LR * 2.4, LR * 1.7, { bone: u, k: kk * 0.6 }));
-      coat.push(RC(l.mid, l.low, LR * 1.75, LR * 0.95, { bone: m, k: LR * 0.8 }));
+      coat.push(E(lerp(l.top, l.mid, 0.4), [Math.min(BW * 0.21, Math.abs(l.top[0]) * 0.75), BH * 0.5, L * 0.15], { bone: u, k: kk * 0.7 }));
+      coat.push(RC(l.top, l.mid, cap(LR * 2.4, l.top[0]), cap(LR * 1.7, l.mid[0]), { bone: u, k: kk * 0.6 }));
+      coat.push(RC(l.mid, l.low, cap(LR * 1.75, l.mid[0]), LR * 0.95, { bone: m, k: LR * 0.8 }));
       coat.push(S(add(l.low, [0, LR * 0.2, -LR * 0.5]), LR * 0.9, { bone: f, k: LR * 0.6 }));
     }
     coat.push(S(l.low, LR * 1.05, { bone: f, k: LR * 0.5 }));
@@ -147,8 +149,11 @@ function makeQuadruped(THREE, M, p, main) {
   const COAT = main || M(`q_coat_${p.scaly ? 'scale' : p.woolly ? 'wool' : 'fur'}`, furry
     ? { color: 0xffffff, roughness: p.woolly ? 1 : 0.85, sheen: 1, sheenRoughness: 0.55, sheenColor: 0x9a9a9a, vertexColors: true }
     : { color: 0xffffff, roughness: 0.42, clearcoat: 0.35, clearcoatRoughness: 0.45, vertexColors: true }, 'MeshPhysicalMaterial');
+  coat.push(PL([0, -1, 0], [0, 0, 0])); // feet end at the ground
   const cellC = Math.max(L, BH * 2) * 0.0125;
-  make(coat, cellC, COAT, { paint, paintKey: JSON.stringify([p.coat, p.belly, p.accent, p.stripes, p.spots, p.headColor, p.variant ?? 0, p.vary]) });
+  const coatMesh = make(coat, cellC, COAT, { paint, paintKey: JSON.stringify([p.coat, p.belly, p.accent, p.stripes, p.spots, p.headColor, p.variant ?? 0, p.vary]) });
+  if (p.scaly) detailize(COAT, 'scales', 26 / BH, 1.4);
+  if (p.fur && coatMesh && !main) furShells(root, coatMesh, p.fur);
 
   // --- keratin: hooves, horns, tusks, claws, nose leather ---
   const ker = [];
@@ -173,6 +178,8 @@ function makeQuadruped(THREE, M, p, main) {
   }
   if (p.horns === 'unicorn') ker.push(RC(hq(HL * 0.12, HH * 0.42), hq(HL * 0.12 + HH * 1.1, HH * 1.5), HH * 0.11, HH * 0.01, { bone: 'head', k: HH * 0.04, tint: hornT, n: [HH * 0.008, 80 / HH, 'groove'] }));
   if (p.spikes) for (let i = 0; i < 9; i++) { const z = L * 0.38 - i * L * 0.11, y = bodyY + BH * 0.5 - Math.abs(z) * 0.08; ker.push(RC([0, y - BH * 0.05, z], [0, y + BH * 0.22, z - BH * 0.1], BH * 0.07, BH * 0.008, { bone: z > 0 ? 'chest' : 'hips', k: BH * 0.03, tint: tint(p.accent ?? 0x1d4f33) })); }
+  if (ker.length) ker.push(PL([0, -1, 0], [0, 0, 0]));
+  detailize(KER, 'grain', 60 / BH, 0.5);
   make(ker, Math.max(L, BH * 2) * 0.006, KER, { ao: 0.5 });
 
   // --- hair: manes, long tails, tufts (strand grooves) ---
@@ -197,8 +204,9 @@ function makeQuadruped(THREE, M, p, main) {
   if (p.wings) for (const [sx, nm] of [[1, 'L'], [-1, 'R']]) {
     const w0 = K.at[`w${nm}0`], w1 = K.at[`w${nm}1`], tip = add(w1, [sx * wingSpan * 0.55, BH * 0.1, -wingSpan * 0.08]);
     const memb = p.wings === 'membrane';
-    wing.push(RC(w0, w1, BH * 0.06, BH * 0.045, { bone: `w${nm}0`, k: BH * 0.03 }), RC(w1, tip, BH * 0.045, BH * 0.015, { bone: `w${nm}1`, k: BH * 0.02 }));
-    wing.push(G([E(lerp(w0, tip, 0.5), [wingSpan * 0.55, BH * 0.02, wingSpan * 0.3]), PL([0, 0, 1], add(w0, [0, 0, BH * 0.05])), ...(memb ? [S(add(lerp(w0, tip, 0.45), [0, 0, -wingSpan * 0.38]), wingSpan * 0.17, { op: 's', k: BH * 0.05 }), S(add(lerp(w0, tip, 0.8), [0, 0, -wingSpan * 0.33]), wingSpan * 0.12, { op: 's', k: BH * 0.05 })] : [])], { bone: `w${nm}1`, wk: wingSpan * 0.12, k: BH * 0.03, n: memb ? [BH * 0.004, 30 / BH, 'vgroove'] : [BH * 0.006, 40 / BH, 'vgroove'] }));
+    const wk = wingSpan * 0.35; // wide, smooth weights so the wing folds like cloth instead of tearing
+    wing.push(RC(w0, w1, BH * 0.06, BH * 0.045, { bone: `w${nm}0`, k: BH * 0.03, wk }), RC(w1, tip, BH * 0.045, BH * 0.015, { bone: `w${nm}1`, k: BH * 0.02, wk }));
+    wing.push(G([E(lerp(w0, tip, 0.5), [wingSpan * 0.55, BH * 0.02, wingSpan * 0.3]), PL([0, 0, 1], add(w0, [0, 0, BH * 0.05])), ...(memb ? [S(add(lerp(w0, tip, 0.45), [0, 0, -wingSpan * 0.38]), wingSpan * 0.17, { op: 's', k: BH * 0.05 }), S(add(lerp(w0, tip, 0.8), [0, 0, -wingSpan * 0.33]), wingSpan * 0.12, { op: 's', k: BH * 0.05 })] : [])], { bone: `w${nm}1`, wk, k: BH * 0.03, n: memb ? [BH * 0.004, 30 / BH, 'vgroove'] : [BH * 0.006, 40 / BH, 'vgroove'] }));
   }
   make(wing, Math.max(L, BH * 2) * 0.009, M(`q_wing_${(p.accent ?? 0x1d4f33).toString(16)}_${p.wings}`, { color: p.wings === 'feather' ? (p.coat ?? 0xf6f6f6) : (p.accent ?? 0x1d4f33), roughness: p.wings === 'feather' ? 0.85 : 0.6, sheen: 0.6, side: THREE.DoubleSide, vertexColors: true }, 'MeshPhysicalMaterial'), { ao: 0.6 });
   if (p.saddle) make([G([E([0, bodyY + BH * 0.42, L * 0.05], [BW * 0.56, BH * 0.15, L * 0.2]), E([0, bodyY + BH * 0.3, L * 0.05], [BW * 0.5, BH * 0.15, L * 0.19], { op: 's', k: BH * 0.02 })], { bone: 'body' }), E([0, bodyY + BH * 0.5, L * 0.15], [BW * 0.12, BH * 0.08, L * 0.05], { bone: 'body', k: BH * 0.04 })], Math.max(L, BH * 2) * 0.008, M('q_saddle', { color: 0x5a3418, roughness: 0.42, clearcoat: 0.4, vertexColors: true }, 'MeshPhysicalMaterial'));
@@ -271,14 +279,14 @@ function makeBird(THREE, M, p, main) {
     E(bq(s * 0.2, -s * 0.06), [s * 0.27, s * 0.27, s * 0.3], { bone: 'body', k: s * 0.15, rot }),
     RC(neckB, headP, s * 0.13, s * 0.11, { bone: 'neck', k: s * 0.1 }),
     S(add(headP, [0, s * 0.02, 0]), s * 0.16 * (p.bigEyes ? 1.25 : 1), { bone: 'head', k: s * 0.06 }),
-    E(bq(-s * 0.5, s * 0.07), [s * 0.17, s * 0.03, s * 0.28 * (p.tailLen ?? 1)], { bone: 'tail', k: s * 0.08, rot: [ang + 0.2, 0, 0], n: [s * 0.006, 50 / s, 'vgroove'] }),
+    E(bq(-s * 0.5, s * 0.07), [s * 0.17, s * 0.04, s * 0.28 * (p.tailLen ?? 1)], { bone: 'tail', k: s * 0.08, rot: [ang + 0.2, 0, 0], n: [s * 0.006, 50 / s, 'vgroove'] }),
   );
   if (p.bigEyes) plum.push(E(add(headP, [0, 0, s * 0.11]), [s * 0.18, s * 0.15, s * 0.05], { bone: 'head', k: s * 0.05 }));
   if (p.ears) for (const sx of [1, -1]) plum.push(RC(add(headP, [sx * s * 0.09, s * 0.12, 0]), add(headP, [sx * s * 0.13, s * 0.27, -s * 0.02]), s * 0.04, s * 0.005, { bone: 'head', k: s * 0.03 }));
   for (const [sx, nm] of [[1, 'L'], [-1, 'R']]) {
     const w0 = K.at[`w${nm}0`], w1 = K.at[`w${nm}1`];
-    plum.push(E(add(w0, [sx * span * 0.22, 0, -s * 0.06]), [span * 0.24, s * 0.028, s * 0.2], { bone: `w${nm}0`, k: s * 0.05, tint: [0.97, 0.97, 0.97] }));
-    plum.push(G([E(add(w1, [sx * span * 0.28, 0, -s * 0.1]), [span * 0.32, s * 0.02, s * 0.2]), PL([0, 0, 1], add(w1, [0, 0, s * 0.08]))], { bone: `w${nm}1`, k: s * 0.04, n: [s * 0.005, 45 / s, 'vgroove'] }));
+    plum.push(E(add(w0, [sx * span * 0.22, 0, -s * 0.06]), [span * 0.24, s * 0.04, s * 0.2], { bone: `w${nm}0`, k: s * 0.05, tint: [0.97, 0.97, 0.97] }));
+    plum.push(G([E(add(w1, [sx * span * 0.28, 0, -s * 0.1]), [span * 0.32, s * 0.034, s * 0.2]), PL([0, 0, 1], add(w1, [0, 0, s * 0.08]))], { bone: `w${nm}1`, k: s * 0.04, n: [s * 0.004, 45 / s, 'vgroove'] }));
   }
   // plumage colouring: body / belly / head / wings with feather rows
   const cb = new THREE.Color(p.body ?? 0x3d77c2), cbel = new THREE.Color(p.belly ?? p.body ?? 0xf2e6d0), cw = new THREE.Color(p.wing ?? p.body ?? 0x2a5aa0), ch = new THREE.Color(p.head ?? p.body ?? 0x3d77c2);
@@ -290,6 +298,7 @@ function makeBird(THREE, M, p, main) {
     const k = 0.92 + 0.12 * K.vnoise(x / s * 9, y / s * 9, z / s * 9);
     c[0] *= col.r * k; c[1] *= col.g * k; c[2] *= col.b * k;
   };
+  plum.push(PL([0, -1, 0], [0, 0, 0]));
   make(plum, s * 0.025, main || M('b_plumage', { color: 0xffffff, roughness: 0.8, sheen: 1, sheenRoughness: 0.4, sheenColor: 0x888888, vertexColors: true }, 'MeshPhysicalMaterial'), { paint, paintKey: JSON.stringify([p.body, p.belly, p.wing, p.head]) });
   // beak, legs, comb
   const tint = (c) => { const q = new THREE.Color(c); return [q.r, q.g, q.b]; };
@@ -304,6 +313,7 @@ function makeBird(THREE, M, p, main) {
     ker.push(RC(h, kn, s * 0.035, s * 0.022, { bone: `l${nm}`, k: s * 0.01, tint: lt }), RC(kn, foot, s * 0.022, s * 0.018, { bone: `k${nm}`, k: s * 0.008, tint: lt }));
     for (const a of [-0.45, 0, 0.45, Math.PI]) ker.push(RC(foot, add(foot, [Math.sin(a) * s * 0.13, -s * 0.008, Math.cos(a) * s * (a === Math.PI ? 0.08 : 0.14)]), s * 0.014, s * 0.008, { bone: `k${nm}`, k: s * 0.006, tint: lt }));
   }
+  ker.push(PL([0, -1, 0], [0, 0, 0]));
   make(ker, s * 0.012, M('b_keratin', { color: 0xffffff, roughness: 0.35, clearcoat: 0.6, vertexColors: true }, 'MeshPhysicalMaterial'), { ao: 0.5 });
   for (const sx of [1, -1]) K.eye(add(headP, [sx * s * (p.bigEyes ? 0.075 : 0.12), s * 0.06, s * (p.bigEyes ? 0.13 : 0.07)]), s * (p.bigEyes ? 0.06 : 0.035), 'head', p.eye ?? 0x2a1a0a, 'round', p.bigEyes ? [sx * 0.15, 0, 1] : [sx, 0.1, 0.3]);
   const [body, neck, head, tail, wL0, wL1, wR0, wR1, lL, kL, lR, kR] = ['body', 'neck', 'head', 'tail', 'wL0', 'wL1', 'wR0', 'wR1', 'lL', 'kL', 'lR', 'kR'].map((n) => bones[B[n]]);
@@ -385,20 +395,23 @@ function makeSerpent(THREE, M, p, main) {
   const L = p.length ?? 1.6, R = p.radius ?? 0.04, N = 10, lod = p.lod === 'low' ? 2 : 1;
   const spec = [];
   const seg = L / N;
-  for (let i = 0; i <= N; i++) spec.push([`s${i}`, i ? `s${i - 1}` : null, [0, R, L / 2 - i * seg]]);
+  const lift = (i) => (p.raised ? L * 0.22 * Math.max(0, 1 - i / 2.7) ** 1.6 : 0); // cobra: the first segments rise off the ground
+  const hy = lift(0);
+  for (let i = 0; i <= N; i++) spec.push([`s${i}`, i ? `s${i - 1}` : null, [0, R + lift(i), L / 2 - i * seg - (p.raised && i < 3 ? (3 - i) * seg * 0.25 : 0)]]);
   const K = rigKit(M, spec, lod);
   const { E, S, RC, make, root, bones, at } = K;
   const nodes = [];
   const rad = (i) => R * (i < 1 ? 0.85 : Math.max(0.12, 1 - Math.max(0, i / N - 0.55) * 2));
   for (let i = 0; i < N; i++) nodes.push(RC(at[`s${i}`], at[`s${i + 1}`], rad(i), rad(i + 1), { bone: `s${i}`, k: R * 0.4 }));
-  const hc = [0, R * 1.05, L / 2 + R * 0.9];
+  const hz = at.s0[2];
+  const hc = [0, hy + R * 1.05, hz + R * 0.9];
   if (!p.noEyes) {
     nodes.push(E(hc, [R * 1.25, R * 0.7, R * 1.6], { bone: 's0', k: R * 0.6 }));
-    nodes.push(E([0, R * 0.85, L / 2 + R * 2.3], [R * 0.7, R * 0.5, R * 0.8], { bone: 's0', k: R * 0.5 }));
-    for (const sx of [1, -1]) nodes.push(S([sx * R * 0.25, R * 1.0, L / 2 + R * 3.05], R * 0.1, { op: 's', k: R * 0.08 }));
-    nodes.push(E([0, R * 0.62, L / 2 + R * 1.9], [R * 0.9, R * 0.04, R * 1.3], { op: 's', k: R * 0.06 }));
-  } else nodes.push(S([0, R, L / 2], R * 0.85, { bone: 's0', k: R * 0.4 }));
-  if (p.raised) nodes.push(E([0, R * 1.0, L / 2 - seg * 1.2], [R * 2.6, R * 0.35, seg * 0.9], { bone: 's1', k: R * 0.5 }));
+    nodes.push(E([0, hy + R * 0.85, hz + R * 2.3], [R * 0.7, R * 0.5, R * 0.8], { bone: 's0', k: R * 0.5 }));
+    for (const sx of [1, -1]) nodes.push(S([sx * R * 0.25, hy + R * 1.0, hz + R * 3.05], R * 0.1, { op: 's', k: R * 0.08 }));
+    nodes.push(E([0, hy + R * 0.62, hz + R * 1.9], [R * 0.9, R * 0.04, R * 1.3], { op: 's', k: R * 0.06 }));
+  } else nodes.push(S(at.s0, R * 0.85, { bone: 's0', k: R * 0.4 }));
+  if (p.raised) nodes.push(E([0, (at.s1[1] + at.s2[1]) / 2, (at.s1[2] + at.s2[2]) / 2 - R * 0.3], [R * 2.8, seg * 0.75, R * 0.5], { bone: 's1', k: R * 0.6, rot: [0.35, 0, 0] }));
   const c1 = new THREE.Color(p.body ?? 0x4a7a2a), c2 = new THREE.Color(p.accent ?? 0x2a4a1a), belly = new THREE.Color(0xe8dcb8);
   const paint = (x, y, z, c, n) => {
     const u = (L / 2 - z) / L;
@@ -410,13 +423,15 @@ function makeSerpent(THREE, M, p, main) {
     const k = 0.84 + 0.2 * Math.min(1, Math.hypot(sx - Math.floor(sx) - 0.5, sy - Math.floor(sy) - 0.5) * 1.7);
     c[0] *= col.r * k; c[1] *= col.g * k; c[2] *= col.b * k;
   };
+  nodes.push({ s: ['p', 0, -1, 0, 0], op: 'i' });
   make(nodes, R * 0.22, main || M('s_scales', { color: 0xffffff, roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.25, vertexColors: true }, 'MeshPhysicalMaterial'), { paint, paintKey: JSON.stringify([p.body, p.accent, p.bands, p.noEyes]) });
-  if (!p.noEyes) for (const sx of [1, -1]) K.eye([sx * R * 0.82, R * 1.3, L / 2 + R * 1.75], R * 0.24, 's0', 0xc8a020, 'slit', [sx, 0.2, 0.4]);
+  if (!p.noEyes) for (const sx of [1, -1]) K.eye([sx * R * 0.82, hy + R * 1.3, hz + R * 1.75], R * 0.24, 's0', 0xc8a020, 'slit', [sx, 0.2, 0.4]);
   root.userData.rig = (t, mode) => {
     const moving = mode === 'slither' || mode === 'walk' || mode === 'swim';
     const f = moving ? 3 : 0.8, a = moving ? 0.38 : 0.12;
-    bones.forEach((b, i) => { b.rotation.set(0, i ? Math.sin(t * f - i * 0.8) * a * Math.min(1, i / 2) : 0, 0); });
-    if (p.raised) { bones[1].rotation.x = -0.75; bones[2].rotation.x = -0.35; bones[0].rotation.x = 0.95; }
+    const first = p.raised ? 4 : 1; // a raised cobra keeps its neck still and sways gently
+    bones.forEach((b, i) => { b.rotation.set(0, i >= first ? Math.sin(t * f - i * 0.8) * a * Math.min(1, (i - first + 1) / 2) : 0, 0); });
+    if (p.raised) bones[0].rotation.y = Math.sin(t * 0.9) * 0.25;
   };
   root.userData.rig(0, 'idle');
   return root;
@@ -458,7 +473,7 @@ function makeArthropod(THREE, M, p, main) {
   }
   for (const l of legs) {
     const r = s * (type === 'spider' ? 0.035 : type === 'crab' ? 0.045 : 0.025);
-    N.push(RC(l.hip, l.knee, r, r * 0.85, { bone: `h${l.nm}`, k: r, n: hairy }), RC(l.knee, l.foot, r * 0.85, r * 0.35, { bone: `k${l.nm}`, k: r * 0.5, n: hairy }));
+    N.push(RC(l.hip, l.knee, r, r * 0.85, { bone: `h${l.nm}`, k: r }), RC(l.knee, l.foot, r * 0.85, r * 0.4, { bone: `k${l.nm}`, k: r * 0.5 }));
   }
   const cb = new THREE.Color(p.body ?? 0x1e1a18), ca = new THREE.Color(p.accent ?? 0xc0201a);
   const paint = (x, y, z, c, n) => {

@@ -2,7 +2,13 @@
 
 An MCP server that turns a sentence (or a JSON spec) into a **validated, modern three.js scene with realistic, sculpted models**: a self-contained `index.html` you can open, plus a reusable `scene.js` module you can drop into any app (Vite, React, Next, plain JS).
 
-Inside, an **orchestrator** routes every request through **12 agents and 44 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine. Dedicated **character** and **creature** agents plan people, animals and fantasy creatures in detail before they are built.
+Inside, an **orchestrator** routes every request through **16 agents and 58 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine.
+
+- **Character** and **creature** agents plan people, animals and fantasy creatures in detail.
+- The **architect** models *any* object from a blueprint, so nothing falls back to a placeholder.
+- The **surfacing** agent adds real fur and micro-detail.
+- The **quality** agent is a critic that scores every model and explains what is weak.
+- The **exporter** writes `.glb` files with animation clips for Blender, Unity, Unreal or any glTF viewer.
 
 ![Four generated scenes](docs/preview.png)
 
@@ -15,7 +21,7 @@ git clone https://github.com/chiru144/threejs-models.git
 cd threejs-models
 npm install
 npm run doctor        # checks every agent + sub-agent in YOUR environment
-npm test              # full test suite (136 tests, ~4 min: every archetype and species is sculpted)
+npm test              # full test suite (172 tests, several minutes: every archetype, species and blueprint is sculpted and scored)
 ```
 
 ### Connect it to your MCP client
@@ -46,22 +52,24 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 
 | Tool | What it does | Typical reply size |
 |---|---|---|
-| `forge_build` | Prompt or spec → `index.html` + `scene.js` + `spec.json`, validated in real three.js | ~450 chars |
+| `forge_build` | Prompt or spec → `index.html` + `scene.js` + `spec.json`, validated in real three.js and quality-scored. `export_glb` also writes `scene.glb` | ~500 chars |
 | `forge_plan` | Prompt → compact JSON spec (no code). Edit it, then pass it to `forge_build` | ~300 chars |
-| `forge_character` | One person, animal or creature from a description → design sheet + rigged `model.js` + studio preview | ~800 chars |
-| `forge_model` | One model (`tree`, `car`, `knight`, `horse`, `owl`…) as `createModel(THREE, params)`; `style: stylized` for low-poly | code, or a path with `out_file` |
+| `forge_character` | One person, animal or creature from a description → design sheet, quality score, rigged `model.js`, `model.glb` with animation clips, studio preview | ~900 chars |
+| `forge_sculpt` | **Any object** from a blueprint (parts made of shapes that blend, cut, mirror and repeat) → design review, quality score, `model.js`, `model.glb`, preview | ~500 chars |
+| `forge_model` | One catalog model (`tree`, `car`, `knight`, `horse`, `owl`…) as `createModel(THREE, params)`, with its quality score. `glb: true` also exports a `.glb`; `style: stylized` gives low-poly | code, or a path with `out_file` |
 | `forge_review` | Reviews *your* three.js code: removed APIs, per-frame allocations, shadows, colour space, resize, pixel ratio. Score + fixes | one line per finding |
-| `forge_catalog` | Models + params, characters, creatures, materials, colours, lighting, animations, budgets, agents, spec example. Request one `section` at a time | 0.3–3 KB |
+| `forge_catalog` | Models + params, characters, creatures, the blueprint language, materials, colours, lighting, animations, budgets, agents, spec example. Request one `section` at a time | 0.3–3 KB |
 | `forge_health` | Runs every agent and sub-agent self-test plus an end-to-end build | ~1 KB |
 
 ## Agents and sub-agents
 
 ```
-                         ┌──────────────────────────── Orchestrator ────────────────────────────┐
- prompt / spec ──► planner ─► character ─► creature ─► material ─► optimizer ─► composer ─► modeler
-                   (people)    (animals)                                                     │
-        files + summary ◄── validator ◄── codegen ◄── lighting ◄── animation ◄──────────────┘
-                                                      reviewer ◄── forge_review (your code)
+ prompt / spec ─► planner ─► character ─► creature ─► architect ─► material ─► surfacing ─► optimizer ─► composer
+                  (parse)    (people)     (animals)   (anything)                (fur, detail)                │
+                                                                                                             ▼
+ files + summary ◄─ exporter ◄─ quality ◄─ validator ◄─ codegen ◄─ lighting ◄─ animation ◄─ modeler ◄────────┘
+                    (.glb)      (critic)   (runs it)
+                                                          reviewer ◄── forge_review (your own code)
 ```
 
 | Agent | Sub-agents | Job |
@@ -69,15 +77,71 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 | **planner** | intent-parser · theme-expander · spec-normalizer | Reads counts, colours, materials, motion, lighting and quality words. Expands themes (forest, village, city, desert, space, cave, dining room…). Validates and clamps any spec |
 | **character** | archetype-resolver · anatomy-planner · appearance-planner · wardrobe-planner · pose-planner · relation-planner · rig-inspector | Plans each person like a character artist: 42 archetypes; real head-unit proportions by age, sex and build; skin, hair, eyes, facial hair, glasses; outfit, colours, hat, cape and prop; pose. Seats riders on mounts, puts pets beside their owner, then builds the rig in three.js to check feet are on the ground, the height is right and every pose works |
 | **creature** | species-classifier · morphology-planner · coat-planner · behavior-planner · rig-inspector | 56 species across 5 body plans (quadruped, bird, fish, serpent, arthropod). Sets proportions, ears, horns, tail, wings, trunk and mane; coat colours, spots and stripes; "baby", "winged" and "fat" modifiers; a gait that fits the body (horses gallop, penguins can't fly, sharks swim) |
+| **architect** | blueprint-library · schema-validator · blueprint-compiler · design-reviewer | Models anything from a blueprint. Validates it and explains errors; expands mirrors and arrays; scales, grounds and picks a resolution per part; binds materials and paint. Reviews the *craft* (too few forms, no cuts or blends, one material, floating or too-thin parts). The built-in car, house, table, chair, lamp, vase, mushroom, crystal and rigged robot are blueprints |
 | **material** | color-resolver · preset-mapper · material-dedup | Colour names/hex → PBR presets (metal, chrome, gold, glass, ice, ceramic, car paint, neon, lava, toon…). Identical materials are shared |
+| **surfacing** | fur-groomer · detail-shader | Shell fur for 23 mammal species (length and density from body size; hero animals only, by quality). Procedural micro-detail with no textures or UVs: skin pores, fabric weave and knit, leather, scales, bark, stone and brick grain. It follows skinned meshes and fades with distance |
 | **optimizer** | cost-estimator · instancing-advisor · budget-planner | Builds each model in real three.js to count triangles and parts. Repeated objects become `InstancedMesh` (400 trees = same draw calls as 10). Counts are trimmed to the quality budget |
 | **composer** | layout-planner · environment-builder · camera-framer | Hero row at the centre, collision-free scatter rings around it, ground/terrain/lake basins, camera and orbit limits |
-| **modeler** | primitive · procedural · parametric · environment · rigged modelers | 23 props/environment models plus 6 articulated, rigged body plans (human, quadruped, bird, fish, serpent, arthropod) |
+| **modeler** | primitive · procedural · parametric · environment · blueprint · rigged modelers | Emits only the factories a scene uses: primitives, environment, one generic blueprint sculptor, and 6 rigged body plans (human, quadruped, bird, fish, serpent, arthropod) |
 | **animation** | motion-binder · loop-emitter | rotate, float, orbit, pulse, sway and bounce, plus rig motion: idle, walk, run, wave, dance, fly, swim and slither. Limbs animate and the figure travels a loop, with speed scaled to body size. Emits only the cases used |
 | **lighting** | rig-selector · shadow-configurator | studio, daylight, sunset, night, space and neon rigs. One shadow caster with a frustum fitted to the scene |
 | **codegen** | module-emitter · html-emitter · model-emitter | r187 best practice: `outputColorSpace`, ACES tone mapping, PMREM `RoomEnvironment`, `Timer`, `setAnimationLoop`, capped pixel ratio, resize, `dispose()` |
 | **validator** | syntax-validator · runtime-validator · budget-checker · best-practice-linter | Parses the output, **imports and runs it against real three.js in Node**, runs `update()` and `dispose()`, measures draw calls and triangles, lints |
+| **quality** | mesh-inspector · form-inspector · skin-inspector · surface-inspector · scorer | The critic. Inspects the *built model*: watertightness, non-manifold edges, folded faces, floating debris, grounding, skin-weight normalisation, a stretch test in every animation pose, PBR sanity and painted detail. Scores 0–100 with a grade and concrete notes; below 70 is flagged weak |
+| **exporter** | clip-baker · glb-writer | Bakes each rig into seamless, optimised `AnimationClip`s (idle, walk, run, wave, dance, fly, swim, slither). Writes glTF 2.0 binary with skins, vertex colours, PBR extensions and textures; output passes the Khronos validator |
 | **reviewer** | syntax-checker · api-auditor · performance-auditor · correctness-auditor | Same rule engine, applied to your code |
+
+## Model anything: blueprints
+
+The catalog covers people, 56 species and common props. For everything else, `forge_sculpt` takes a **blueprint**: parts made of simple shapes that blend into each other, cut each other, mirror and repeat. The AI calling the tool designs the object; the server makes it a real model.
+
+```json
+{
+  "name": "lantern", "height": 0.4,
+  "parts": [
+    { "name": "frame", "material": "metal", "color": "#2b2b30", "shapes": [
+      { "type": "cylinder", "from": [0, 0, 0], "to": [0, 0.06, 0], "r": 0.4, "round": 0.01 },
+      { "type": "capsule", "from": [0.3, 0.06, 0.3], "to": [0.3, 0.9, 0.3], "r": 0.03, "mirror": "xz" },
+      { "type": "cone", "from": [0, 0.9, 0], "to": [0, 1.15, 0], "r": [0.46, 0.08] },
+      { "type": "sphere", "at": [0.2, 0.03, 0], "r": 0.05, "op": "subtract", "array": { "count": 6, "radial": "y" } }
+    ] },
+    { "name": "glass", "material": "glass", "color": "#fff2d0", "shapes": [{ "type": "box", "at": [0, 0.48, 0], "size": [0.56, 0.84, 0.56] }] },
+    { "name": "flame", "material": "emissive", "color": "#ffb040", "shapes": [{ "type": "ellipsoid", "at": [0, 0.4, 0], "r": [0.07, 0.16, 0.07] }] }
+  ]
+}
+```
+
+- **Shapes:** sphere, ellipsoid, box, capsule, cylinder, cone, torus, plane.
+- **Operations:** `add`, `subtract`, `intersect`, each with an optional smooth `blend`.
+- **Modifiers:** `mirror`, radial or linear `array`, `rotate`, `scale`, `round`, surface `noise`; whole parts can be rotated and moved.
+- **Surfaces:** 28 materials (metal, chrome, car paint, glass, wood, stone, brick, leather, fabric, emissive…) and paint patterns (noise, gradient, stripes, spots, checker).
+- **Rigging:** optional `bones` and `motions` make it animate. The built-in robot walks, runs and waves this way.
+- **What comes back:** a **craft** score for the design with what to improve, a **quality** score for the built mesh, and `model.js`, `model.glb`, `blueprint.json` and a preview page. `forge_catalog` with `section: "blueprint"` documents the language in about 2 KB.
+
+A design with one sphere gets back: *"only 1 solid shape: the model will look primitive. Break forms into more shapes…"*.
+
+## Quality gate
+
+Every model is inspected after it is built, and every build summary carries the result, for example `quality: avg 98/100 · lowest quadruped4 93 (A)`. The critic checks:
+
+- **Mesh:** watertight, no non-manifold edges, no degenerate or folded faces.
+- **Form:** on the ground, no floating fragments.
+- **Skinning:** weights sum to 1, every bone is used, and a **stretch test** poses the rig in every animation and measures how far edges stretch.
+- **Surface:** physically valid materials, painted detail, no crushed blacks.
+
+Running it on this project's own models found real defects that are now fixed:
+
+- Sleeves were welded to the torso, so characters are now bound in an A-pose.
+- Trouser legs webbed together between the knees.
+- Skin weights leaked between parts that only sit near each other; they now blend only across real joints.
+- The raised cobra pose rotated its body into the ground.
+- Hooves sank below ground level.
+
+Models are also **optimised adaptively**: flat and gently curved regions are decimated while curved detail keeps its density. A box drops from 18k to 4k triangles and the house from 441k to 117k, and meshes stay watertight.
+
+## Export
+
+`forge_character`, `forge_sculpt` and `forge_model` (with `glb: true`) write a `.glb` containing the skinned meshes, skeleton, PBR materials, textures and **baked animation clips**. It opens in Blender, Unity, Unreal, `<model-viewer>` or `GLTFLoader`. `forge_build` with `export_glb: true` writes the whole scene. Fur shells and shader micro-detail are runtime effects and are not part of the GLB.
 
 ## Realism
 
@@ -180,7 +244,7 @@ renderer.setAnimationLoop((t) => { timer.update(t); app.update(timer.getElapsed(
 ## Checking your environment
 
 ```bash
-npm run doctor              # env + deps, all 12 agents / 44 sub-agents, 7 full builds, file writes, MCP stdio round-trip
+npm run doctor              # env + deps, all 16 agents / 58 sub-agents, 7 full builds, a custom blueprint + GLB, file writes, MCP stdio round-trip
 npm run doctor -- --browser # also renders a scene in headless Chromium (needs playwright)
 npm run doctor -- --json    # machine-readable, for CI
 npm test                    # node:test: every sub-agent, pipeline, all models, every archetype and species, rigs, reviewer, real MCP client
@@ -204,10 +268,12 @@ src/server.js            MCP server (stdio) — 7 tools
 src/core/orchestrator.js routes tasks through agents, caching, file output
 src/core/agent.js        Agent / SubAgent base classes (delegate, trace, self-test)
 src/core/sandbox.js      runs models in real three.js (Node) to measure them
-src/agents/*.js          the 12 agents and their sub-agents (character.js, creature.js = specialists)
+src/agents/*.js          the 16 agents and their sub-agents (character, creature, architect, surfacing, quality, exporter = specialists)
+src/core/gltf.js         GLB export in Node (GLTFExporter + PNG/FileReader shims)
 src/library/*.js         helpers (sculpt engine, rig kit, ground textures, grass), human.js (sculpted human),
                          beasts.js (sculpted creatures), props.js (sculpted rocks/trees), characters.js + creatures.js
-                         (archetypes, species, stylized factories), materials, presets, review rules
+                         (archetypes, species, stylized factories), blueprint.js (blueprint compiler, generic sculptor, built-in blueprints),
+                         materials, presets, review rules
 bin/doctor.js            environment check
 test/*.test.js           test suite
 ```

@@ -108,7 +108,7 @@ describe('build pipeline', () => {
 });
 
 describe('single models', () => {
-  for (const name of Object.keys(MODELS)) {
+  for (const name of Object.keys(MODELS).filter((n) => n !== 'blueprint')) {
     test(`forge_model: ${name}`, async () => {
       const r = await orch.model({ model: name });
       assert.ok(r.ok, JSON.stringify(r.validation));

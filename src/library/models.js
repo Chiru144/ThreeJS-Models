@@ -10,6 +10,7 @@ import { HUMAN_FACTORY, ARCHETYPES, OUTFITS, HATS, PROPS, HAIR_STYLES, AGES, BUI
 import { CREATURE_FACTORIES, SPECIES } from './creatures.js';
 import { REAL_CREATURE_FACTORIES } from './beasts.js';
 import { REAL_PROPS } from './props.js';
+import { BLUEPRINT_FACTORY } from './blueprint.js';
 import { resolveColor } from './materials.js';
 
 function makeBox(THREE, M, p, main) {
@@ -288,19 +289,20 @@ export const MODELS = {
   torus: { fn: makeTorus, kind: 'primitive', footprint: 1, height: 1.9, params: { radius: P(0.7, 0.1, 50), tube: P(0.25, 0.02, 10) }, aliases: ['donut'] },
   torusKnot: { fn: makeTorusKnot, kind: 'primitive', footprint: 1, height: 2.1, params: { radius: P(0.7, 0.1, 50), tube: P(0.22, 0.02, 10), p: P(2, 1, 9), q: P(3, 1, 9) }, aliases: ['knot', 'torusknot', 'torus knot'] },
   capsule: { fn: makeCapsule, kind: 'primitive', footprint: 0.5, height: 1.8, params: { radius: P(0.4, 0.05, 20), length: P(1, 0, 50) }, aliases: ['pill'] },
-  crystal: { fn: makeCrystal, kind: 'procedural', footprint: 0.4, height: 1.2, natural: true, params: { height: P(1.2, 0.1, 20) }, aliases: ['gem', 'diamond', 'shard'] },
+  crystal: { fn: BLUEPRINT_FACTORY, stylizedFn: makeCrystal, library: 'crystal', size: (p) => p.bp?.size, kind: 'procedural', footprint: 0.4, height: 1.2, natural: true, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, height: P(1.2, 0.1, 20) }, aliases: ['gem', 'diamond', 'shard'] },
   tree: { fn: REAL_PROPS.tree, stylizedFn: makeTree, kind: 'procedural', footprint: 1, height: 3, natural: true, params: { height: P(3, 0.5, 30), style: { default: 'pine', enum: ['pine', 'round'] } }, aliases: ['pine', 'oak', 'forest tree'], aliasParams: { oak: { style: 'round' } } },
   rock: { fn: REAL_PROPS.rock, stylizedFn: makeRock, kind: 'procedural', footprint: 0.8, height: 0.6, natural: true, params: { size: P(0.8, 0.1, 20), seed: P(7, 0, 1e6) }, aliases: ['stone', 'boulder', 'asteroid'] },
-  mushroom: { fn: makeMushroom, kind: 'procedural', footprint: 0.3, height: 0.6, natural: true, params: { height: P(0.6, 0.1, 10) }, aliases: ['toadstool'] },
-  house: { fn: makeHouse, kind: 'procedural', footprint: 3, height: 4.5, params: { width: P(4, 1, 30), depth: P(4, 1, 30), height: P(2.6, 1, 20), lit: { default: false } }, aliases: ['home', 'cottage', 'cabin', 'building', 'hut'] },
-  car: { fn: makeCar, kind: 'procedural', footprint: 2.2, height: 1.4, params: { length: P(4, 1, 20) }, aliases: ['vehicle', 'automobile'] },
-  robot: { fn: makeRobot, kind: 'procedural', footprint: 0.7, height: 2, params: { height: P(2, 0.3, 20) }, aliases: ['android', 'mech', 'bot'] },
+  mushroom: { fn: BLUEPRINT_FACTORY, stylizedFn: makeMushroom, library: 'mushroom', size: (p) => p.bp?.size, kind: 'procedural', footprint: 0.3, height: 0.6, natural: true, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, height: P(0.6, 0.1, 10) }, aliases: ['toadstool'] },
+  blueprint: { fn: BLUEPRINT_FACTORY, kind: 'blueprint', footprint: 1, height: 1, size: (p) => p.bp?.size ?? { footprint: 1, height: 1 }, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] } }, aliases: ['custom', 'custom model'] },
+  house: { fn: BLUEPRINT_FACTORY, stylizedFn: makeHouse, library: 'house', kind: 'procedural', footprint: 3.2, height: 4.7, size: (p) => p.bp?.size ?? { footprint: 3.2, height: 4.7 }, params: { width: P(5, 1, 30), depth: P(4.5, 1, 30), height: P(2.7, 1, 20), lit: { default: false }, bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] } }, aliases: ['home', 'cottage', 'cabin', 'building', 'hut'] },
+  car: { fn: BLUEPRINT_FACTORY, stylizedFn: makeCar, library: 'car', kind: 'procedural', footprint: 2.3, height: 1.4, size: (p) => p.bp?.size ?? { footprint: 2.3, height: 1.4 }, params: { length: P(4.4, 1, 20), bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] } }, aliases: ['vehicle', 'automobile'] },
+  robot: { fn: BLUEPRINT_FACTORY, stylizedFn: makeRobot, library: 'robot', size: (p) => p.bp?.size, kind: 'procedural', footprint: 0.7, height: 2, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, height: P(2, 0.3, 20) }, aliases: ['android', 'mech', 'bot'] },
   planet: { fn: makePlanet, kind: 'procedural', footprint: 2.5, height: 4, params: { radius: P(2, 0.2, 100), rings: { default: false } }, aliases: ['moon', 'world', 'saturn'], aliasParams: { saturn: { rings: true } } },
   stars: { fn: makeStars, kind: 'backdrop', footprint: 0, height: 0, params: { count: P(2000, 10, 50000), radius: P(300, 10, 5000), seed: P(99, 0, 1e6) }, aliases: ['starfield', 'star', 'starry sky'] },
-  vase: { fn: makeVase, kind: 'parametric', footprint: 0.4, height: 1.4, params: { height: P(1.4, 0.1, 20) }, aliases: ['pot', 'urn'] },
-  table: { fn: makeTable, kind: 'procedural', footprint: 1.1, height: 0.8, params: { width: P(2, 0.3, 10), depth: P(1, 0.3, 10), height: P(0.8, 0.2, 3) }, aliases: ['desk'] },
-  chair: { fn: makeChair, kind: 'procedural', footprint: 0.4, height: 1, params: { size: P(0.5, 0.2, 3) }, aliases: ['seat', 'stool'] },
-  lamp: { fn: makeLamp, kind: 'procedural', footprint: 0.3, height: 3.6, params: { height: P(3.5, 0.5, 20), light: { default: true }, intensity: P(6, 0, 1000) }, aliases: ['streetlight', 'street lamp', 'lantern', 'lamppost'] },
+  vase: { fn: BLUEPRINT_FACTORY, stylizedFn: makeVase, library: 'vase', size: (p) => p.bp?.size, kind: 'parametric', footprint: 0.4, height: 1.4, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, height: P(1.4, 0.1, 20) }, aliases: ['pot', 'urn'] },
+  table: { fn: BLUEPRINT_FACTORY, stylizedFn: makeTable, library: 'table', size: (p) => p.bp?.size, kind: 'procedural', footprint: 1.1, height: 0.8, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, width: P(2, 0.3, 10), depth: P(1, 0.3, 10), height: P(0.8, 0.2, 3) }, aliases: ['desk'] },
+  chair: { fn: BLUEPRINT_FACTORY, stylizedFn: makeChair, library: 'chair', size: (p) => p.bp?.size, kind: 'procedural', footprint: 0.4, height: 1, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, size: P(0.5, 0.2, 3) }, aliases: ['seat', 'stool'] },
+  lamp: { fn: BLUEPRINT_FACTORY, stylizedFn: makeLamp, library: 'lamp', size: (p) => p.bp?.size, kind: 'procedural', footprint: 0.3, height: 3.6, params: { bp: { default: undefined, json: true }, lod: { default: 'high', enum: ['high', 'low'] }, height: P(3.5, 0.5, 20), light: { default: true }, intensity: P(6, 0, 1000) }, aliases: ['streetlight', 'street lamp', 'lantern', 'lamppost'] },
   water: { fn: makeWater, kind: 'surface', footprint: 0, height: 0, params: { size: P(20, 1, 1000) }, aliases: ['lake', 'pond', 'ocean', 'sea', 'pool'] },
   ground: { fn: makeGround, kind: 'surface', footprint: 0, height: 0, params: { size: P(60, 1, 5000), kind: { default: undefined, enum: ['grass', 'sand', 'snow', 'stone', 'wood', 'matte', 'metal'] } }, aliases: ['floor', 'plane'] },
   terrain: { fn: makeTerrain, kind: 'surface', footprint: 0, height: 0, params: { size: P(80, 4, 2000), segments: P(96, 4, 512), amp: P(1.5, 0, 100) }, aliases: ['hills', 'landscape', 'mountains', 'hill'] },
@@ -343,7 +345,7 @@ function creatureModels() {
   const out = {};
   for (const [plan, names] of Object.entries(plans)) {
     // union of every preset key for this body plan -> param schema
-    const params = { species: { default: names[0], enum: names }, vary: { default: false }, size: P(1, 0.01, 30), saddle: { default: false }, lod: { default: 'high', enum: ['high', 'low'] } };
+    const params = { species: { default: names[0], enum: names }, vary: { default: false }, size: P(1, 0.01, 30), saddle: { default: false }, lod: { default: 'high', enum: ['high', 'low'] }, fur: { default: undefined, json: true } };
     // Defaults come from the plan's default species; optional features (wings, horns,
     // spots…) that species lacks default to undefined = absent.
     const def = SPECIES[names[0]];
@@ -381,7 +383,7 @@ function creatureSize(plan, p) {
 /** Footprint radius and height of an object, accounting for its params and scale. */
 export function sizeOf(o) {
   const m = MODELS[o.model];
-  const s = m.size ? m.size(o.params || {}) : { footprint: m.footprint, height: m.height };
+  const s = (m.size && m.size(o.params || {})) || { footprint: m.footprint, height: m.height };
   const k = o.scale ?? 1;
   return { footprint: s.footprint * k, height: s.height * k };
 }
@@ -409,6 +411,7 @@ export function sanitizeParams(name, params = {}) {
   for (const [k, v] of Object.entries(params)) {
     const s = schema[k];
     if (!s) continue;
+    if (s.json) { if (v && typeof v === 'object') out[k] = v; continue; }
     if (s.enum) { if (s.enum.includes(v)) out[k] = v; continue; }
     if (s.color) { const c = resolveColor(v); if (c !== undefined) out[k] = c; continue; }
     if (typeof s.default === 'boolean') { out[k] = Boolean(v); continue; }

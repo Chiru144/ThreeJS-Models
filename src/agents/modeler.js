@@ -1,6 +1,7 @@
 import { Agent, SubAgent, assert } from '../core/agent.js';
 import { MODELS } from '../library/models.js';
 import { buildModel, measure } from '../core/sandbox.js';
+import { expandBlueprint } from '../library/blueprint.js';
 
 const fnName = (name) => `make${name[0].toUpperCase()}${name.slice(1)}`;
 
@@ -16,13 +17,14 @@ function emitFactory(name, kinds, style = 'realistic') {
     style,
     source,
     // helpers the factory calls, plus their own dependencies (rigKit -> sculpt)
-    needs: ((n) => (n.includes('rigKit') && !n.includes('sculpt') ? [...n, 'sculpt'] : n))(['rng', 'heightAt', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField'].filter((h) => new RegExp(`\\b${h}\\b`).test(source))),
+    needs: ((n) => (n.includes('rigKit') && !n.includes('sculpt') ? [...n, 'sculpt'] : n))(['rng', 'heightAt', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField', 'detailize', 'furShells'].filter((h) => new RegExp(`\\b${h}\\b`).test(source))),
   };
 }
 
 function categoryTest(sample) {
   return () => {
-    const { obj } = buildModel(sample, {});
+    const params = sample === 'blueprint' ? { bp: expandBlueprint({ parts: [{ name: 'a', material: 'metal', shapes: [{ type: 'box', at: [0, 0, 0], size: [1, 1, 1] }, { type: 'sphere', at: [0.5, 0.5, 0.5], r: 0.4, op: 'subtract' }] }] }).bp } : {};
+    const { obj } = buildModel(sample, params);
     const s = measure(obj);
     assert(s.finite, `${sample} produced non-finite transforms`);
     assert(s.meshes + (s.points ? 1 : 0) > 0, `${sample} produced no geometry`);
@@ -34,6 +36,7 @@ const CATEGORY = {
   'procedural-modeler': { kinds: ['procedural'], sample: 'tree', description: 'Multi-part procedural models: tree, rock, house, car, robot, planet, furniture, lamp, crystal, mushroom.' },
   'parametric-modeler': { kinds: ['parametric'], sample: 'vase', description: 'Lathe/profile-based parametric models (vase).' },
   'environment-modeler': { kinds: ['surface', 'backdrop'], sample: 'stars', description: 'Ground, terrain height-field, water, starfield.' },
+  'blueprint-modeler': { kinds: ['blueprint'], sample: 'blueprint', description: 'One generic factory that sculpts any compiled blueprint (custom objects and the built-in car, house, furniture, robot…).' },
   'rigged-modeler': { kinds: ['character', 'creature'], sample: 'human', description: 'Articulated, rigged factories for humans and creature body plans (planned by the character/creature agents).' },
 };
 

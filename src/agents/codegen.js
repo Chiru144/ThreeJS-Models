@@ -24,7 +24,7 @@ const indent = (src, pad = '  ') => src.split('\n').map((l) => (l ? pad + l : l)
 const matExpr = (m) => (m ? `M('${m.key}', ${lit(m.props)}${m.type !== 'MeshStandardMaterial' ? `, '${m.type}'` : ''})` : 'undefined');
 
 function helperBlock(needs) {
-  const order = ['rng', 'heightAt', 'scatter', 'instanceize', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField'];
+  const order = ['rng', 'heightAt', 'scatter', 'instanceize', 'mergeParts', 'sculpt', 'rigKit', 'surfaceTex', 'grassField', 'detailize', 'furShells'];
   return order.filter((h) => needs.has(h)).map((h) => indent(H[h].toString())).join('\n');
 }
 
@@ -198,7 +198,8 @@ function emitModule(b) {
   const bg = spec.environment.background ?? lighting.rig.background;
   const fog = lighting.rig.fog != null && spec.environment.fog && !layout.space
     ? `\n  scene.fog = new THREE.Fog(${hex(lighting.rig.fog)}, ${num(Math.max(20, layout.extent * 1.5))}, ${num(Math.max(80, layout.extent * 5 + 40))});` : '';
-  const usedFactories = factories.filter((f) => spec.objects.some((o) => o.model === f.model) || (f.model === 'ground' && env.autoGround));
+  const seenFn = new Set();
+  const usedFactories = factories.filter((f) => (spec.objects.some((o) => o.model === f.model) || (f.model === 'ground' && env.autoGround)) && !seenFn.has(f.fnName) && seenFn.add(f.fnName));
   const q = QUALITY[spec.quality];
   const key = lighting.lights.find((l) => l.type === 'DirectionalLight');
   const outdoor = ['daylight', 'sunset'].includes(lighting.rig.preset);

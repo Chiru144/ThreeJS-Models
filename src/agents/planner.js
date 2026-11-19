@@ -195,6 +195,7 @@ function normalizeSpec(raw, ctx) {
       rotationY: Number(o.rotationY) || 0,
       ...(o.description ? { description: String(o.description).slice(0, 400) } : {}),
       ...(o.inPlace ? { inPlace: true } : {}),
+      ...(o.blueprint && typeof o.blueprint === 'object' ? { blueprint: o.blueprint } : {}),
     });
   });
   assert(objects.length > 0, 'spec has no valid objects');

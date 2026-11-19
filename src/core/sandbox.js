@@ -3,8 +3,9 @@
 import * as THREE from 'three';
 import { MODELS } from '../library/models.js';
 import * as H from '../library/helpers.js';
+import { BLUEPRINT_LIBRARY, expandBlueprint } from '../library/blueprint.js';
 
-const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize, H.mergeParts, H.sculpt, H.rigKit, H.surfaceTex, H.grassField].map((f) => f.toString()).join('\n');
+const HELPERS = [H.rng, H.heightAt, H.scatter, H.instanceize, H.mergeParts, H.sculpt, H.rigKit, H.surfaceTex, H.grassField, H.detailize, H.furShells].map((f) => f.toString()).join('\n');
 
 export function makeMaterialCache() {
   const mats = new Map();
@@ -24,13 +25,15 @@ export function buildModel(name, params = {}, terrain = { amp: 0, flats: [] }, s
   // eslint-disable-next-line no-new-func
   if (!factories.has(key)) factories.set(key, new Function('THREE', 'TERRAIN', `${HELPERS}\nreturn (${fn.toString()});`)(THREE, terrain));
   const factory = factories.get(key);
+  // library models sculpt from a compiled blueprint; compile the default one when the caller gave none
+  if (fn === def.fn && def.library && !params.bp) params = { ...params, bp: expandBlueprint(BLUEPRINT_LIBRARY[def.library](params)).bp };
   const { M, mats } = makeMaterialCache();
   const obj = factory(THREE, M, params, undefined);
   return { obj, mats };
 }
 
 export function measure(root) {
-  let triangles = 0, drawCalls = 0, meshes = 0, instances = 0, points = 0, lights = 0, shadowLights = 0;
+  let triangles = 0, drawCalls = 0, meshes = 0, instances = 0, points = 0, lights = 0, shadowLights = 0, shellTris = 0;
   const materials = new Set(), geometries = new Set();
   let finite = true;
   root.updateMatrixWorld(true);
@@ -40,6 +43,7 @@ export function measure(root) {
     if (o.isLight) { lights++; if (o.castShadow) shadowLights++; }
     if (o.isPoints) { points += o.geometry.attributes.position.count; drawCalls++; geometries.add(o.geometry); materials.add(o.material); }
     if (!o.isMesh) return;
+    if (o.userData.shell) { shellTris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; drawCalls++; return; }
     meshes++;
     const g = o.geometry;
     geometries.add(g);
@@ -50,7 +54,7 @@ export function measure(root) {
     triangles += tri * n;
     drawCalls += Array.isArray(o.material) ? o.material.length : 1;
   });
-  return { triangles: Math.round(triangles), drawCalls, meshes, instances, points, lights, shadowLights, materials: materials.size, geometries: geometries.size, finite };
+  return { triangles: Math.round(triangles + shellTris), drawCalls, meshes, instances, points, lights, shadowLights, materials: materials.size, geometries: geometries.size, finite };
 }
 
 export { THREE };

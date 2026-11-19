@@ -17,7 +17,7 @@ function readTraits(text) {
   let t = ` ${String(text || '').toLowerCase().replace(/[^a-z0-9#\s-]/g, ' ')} `;
   const tr = {};
   // hair first, so "short red hair" does not become "short person in red"
-  const hairRe = new RegExp(`\\b((?:long|short|curly|wavy|straight|spiky|messy|braided|shoulder-length)\\s+)?((?:${Object.keys(HAIR_COLORS).join('|')})\\s+)?((?:long|short|curly|wavy|spiky)\\s+)?(hair|haired)\\b`);
+  const hairRe = new RegExp(`\\b((?:long|short|curly|wavy|straight|spiky|messy|braided|shoulder-length)\\s+)?((?:${Object.keys(HAIR_COLORS).sort((a, b) => b.length - a.length).join('|')})\\s+)?((?:long|short|curly|wavy|spiky)\\s+)?(hair|haired)\\b`);
   const hm = t.match(hairRe);
   if (hm) {
     const style = (hm[1] || hm[3] || '').trim();
@@ -250,6 +250,7 @@ export class CharacterAgent extends Agent {
           run: (input) => planAppearance(input),
           test: () => {
             const { traits } = readTraits('a tall woman with long red hair, green eyes and glasses');
+            assert(readTraits('long dark hair').traits.hair === 'long' && readTraits('a man with dark brown hair').traits.hairColor === HAIR_COLORS['dark brown'], 'dark hair');
             assert(traits.hair === 'long' && traits.hairColor === HAIR_COLORS.red && traits.eyeColor === EYE_COLORS.green && traits.glasses === 'glasses' && traits.sex === 'female' && traits.heightK > 1, JSON.stringify(traits));
             const ap = planAppearance({ base: {}, traits, explicit: {}, anatomy: { age: 'adult', sex: 'female' }, seed: 3 });
             assert(ap.hairColor === HAIR_COLORS.red, 'appearance');

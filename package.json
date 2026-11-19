@@ -22,5 +22,8 @@
     "acorn": "^8.19.0",
     "three": "^0.187.0",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "gltf-validator": "^2.0.0-dev.3.10"
   }
 }

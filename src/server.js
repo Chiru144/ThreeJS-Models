@@ -10,11 +10,13 @@ import { z } from 'zod';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Orchestrator, compactSpec } from './core/orchestrator.js';
+import { formatQuality } from './agents/quality.js';
 
 const pkg = { name: 'threejs-forge', version: '1.0.0' };
 
 const objectSchema = z.object({
-  model: z.string().describe('Model name or alias, see forge_catalog'),
+  model: z.string().describe('Model name or alias, see forge_catalog; "blueprint" + blueprint:{...} for a custom object'),
+  blueprint: z.object({}).loose().optional(),
   count: z.number().int().min(1).max(5000).optional(),
   params: z.record(z.string(), z.any()).optional(),
   color: z.union([z.string(), z.number()]).optional().describe('name, #hex or 0xhex'),
@@ -57,6 +59,7 @@ export function createServer(orchestrator = new Orchestrator()) {
       write_files: z.boolean().optional().describe('Default true'),
       return_code: z.boolean().optional().describe('Include scene.js in reply (costs tokens). Default false'),
       detail: z.enum(['brief', 'full']).optional().describe('full adds agent trace + resolved spec'),
+      export_glb: z.boolean().optional().describe('Also write scene.glb'),
     },
   }, async (args) => {
     try {
@@ -86,12 +89,13 @@ export function createServer(orchestrator = new Orchestrator()) {
       color: z.union([z.string(), z.number()]).optional(),
       out_file: z.string().optional().describe('Write here instead of returning code'),
       style: z.enum(['realistic', 'stylized']).optional(),
+      glb: z.boolean().optional().describe('With out_file: also write a .glb with animation clips'),
     },
   }, async (args) => {
     try {
       const r = await o.run('model', args);
       const s = r.validation.runtime?.stats;
-      const head = `${r.ok ? '✔' : '✘'} ${args.model}: ${s ? `${s.triangles} tris · ${s.drawCalls} draw calls · ${s.materials} materials` : r.validation.runtime?.error}`;
+      const head = `${r.ok ? '✔' : '✘'} ${args.model}: ${s ? `${s.drawCalls} draw calls · ${s.materials} materials` : r.validation.runtime?.error}\n${formatQuality(r.quality)}${r.exported ? `\nglb: ${r.exported.file} (${(r.exported.bytes / 1024).toFixed(0)} KB${r.exported.summary.animations.length ? `, clips: ${r.exported.summary.animations.join(', ')}` : ''})` : ''}`;
       return { ...text(r.written ? `${head}\nwritten: ${r.written}` : `${head}\n\`\`\`js\n${r.source.trimEnd()}\n\`\`\``), isError: !r.ok };
     } catch (e) { return fail(e); }
   });
@@ -111,9 +115,32 @@ export function createServer(orchestrator = new Orchestrator()) {
       const lines = [
         `${r.ok ? '✔' : '✘'} ${r.subject.model}${r.others ? ` (+${r.others} other object(s) in the description ignored)` : ''}`,
         `sheet: ${r.sheet}`,
-        r.build.written ? `files: ${r.build.written} → index.html (preview), scene.js, model.js` : '',
-        s ? `stats: ${s.drawCalls} draw calls · ${s.triangles} tris · rig modes checked` : '',
-        `params: ${json(r.subject.params)}`,
+        formatQuality(r.quality),
+        r.build.written ? `files: ${r.build.written} → index.html (preview), scene.js, model.js${r.exported ? `, model.glb (${(r.exported.bytes / 1024).toFixed(0)} KB, clips: ${r.exported.summary.animations.join(', ')})` : ''}` : '',
+        `params: ${json(Object.fromEntries(Object.entries(r.subject.params).filter(([k]) => k !== 'bp' && k !== 'fur')))}`,
+      ];
+      return { ...text(lines.filter(Boolean).join('\n')), isError: !r.ok };
+    } catch (e) { return fail(e); }
+  });
+
+  server.registerTool('forge_sculpt', {
+    title: 'Sculpt any model from a blueprint',
+    description: 'Model ANYTHING (not in the catalog): pass a blueprint of parts made of shapes that blend, cut, mirror and repeat (see forge_catalog section=blueprint). The architect reviews the design, the sculptor builds it, the critic scores it. Writes model.js, model.glb, blueprint.json and a preview; returns scores + what to improve.',
+    inputSchema: {
+      blueprint: z.object({ name: z.string().optional(), parts: z.array(z.object({}).loose()).min(1) }).loose(),
+      out_dir: z.string().optional(),
+      write_files: z.boolean().optional(),
+      glb: z.boolean().optional().describe('Default true'),
+    },
+  }, async (args) => {
+    try {
+      const r = await o.run('sculpt', args);
+      const d = r.design;
+      const lines = [
+        `${!r.ok ? '✘' : r.quality.weak ? '⚠ weak model' : d.review.craft < 60 ? '⚠ weak design' : '✔'} ${d.bp.name}: ${d.stats.parts} parts · ${d.stats.shapes} shapes · ${d.stats.size.map((q) => q.toFixed(2)).join('×')} m`,
+        `craft ${d.review.craft}/100 · ${formatQuality(r.quality)}`,
+        r.build.written ? `files: ${r.build.written} → index.html (preview), model.js${r.exported ? `, model.glb (${(r.exported.bytes / 1024).toFixed(0)} KB${r.exported.summary.animations.length ? `, clips: ${r.exported.summary.animations.join(', ')}` : ''})` : ''}, blueprint.json` : '',
+        d.review.notes.length ? `improve: ${d.review.notes.slice(0, 5).join(' | ')}` : '',
       ];
       return { ...text(lines.filter(Boolean).join('\n')), isError: !r.ok };
     } catch (e) { return fail(e); }
@@ -138,7 +165,7 @@ export function createServer(orchestrator = new Orchestrator()) {
   server.registerTool('forge_catalog', {
     title: 'Catalog',
     description: 'Lists models+params, materials, colours, lighting, animations, quality budgets, agents, or a spec example. Ask for one section to save tokens.',
-    inputSchema: { section: z.enum(['models', 'characters', 'creatures', 'materials', 'colors', 'lighting', 'animations', 'quality', 'agents', 'spec', 'all']).optional() },
+    inputSchema: { section: z.enum(['models', 'characters', 'creatures', 'blueprint', 'materials', 'colors', 'lighting', 'animations', 'quality', 'agents', 'spec', 'all']).optional() },
   }, async ({ section = 'models' }) => text(json(await o.run('catalog', { section }))));
 
   server.registerTool('forge_health', {

@@ -91,6 +91,8 @@ async function main() {
     record('pipeline', 'single model (tree)', m.ok);
     const ch = await orch.character({ description: 'a red dragon flying', write_files: false });
     record('pipeline', 'creature design (dragon)', ch.ok, ch.sheet);
+    const sc = await orch.sculpt({ blueprint: { name: 'stool', height: 0.45, parts: [{ name: 'seat', material: 'wood', color: '#8b5a2b', shapes: [{ type: 'cylinder', from: [0, 0.9, 0], to: [0, 1, 0], r: 0.4, round: 0.03 }, { type: 'cone', from: [0.25, 0.9, 0.25], to: [0.32, 0, 0.32], r: [0.05, 0.035], mirror: 'xz' }] }] }, out_dir: 'doctor-stool' });
+    record('pipeline', 'custom blueprint → sculpt → GLB', sc.ok && sc.exported?.bytes > 1000, `quality ${sc.quality.score}/100, ${(sc.exported.bytes / 1024).toFixed(0)} KB glb`);
     const rv = await orch.review({ code: 'const r = new THREE.WebGLRenderer(); r.outputEncoding = THREE.sRGBEncoding;' });
     record('pipeline', 'code review', rv.findings.some((f) => f.id === 'encoding-api'), `score ${rv.score}`);
   } catch (e) { record('pipeline', 'model/review', false, e.message); }
@@ -106,7 +108,7 @@ async function main() {
     const client = new Client({ name: 'doctor', version: '1.0.0' });
     await client.connect(transport);
     const { tools } = await client.listTools();
-    record('mcp', 'server starts and lists tools', tools.length === 7, tools.map((t) => t.name).join(', '));
+    record('mcp', 'server starts and lists tools', tools.length === 8, tools.map((t) => t.name).join(', '));
     const h = await client.callTool({ name: 'forge_health', arguments: {} });
     record('mcp', 'forge_health over MCP', !h.isError, h.content[0].text.split('\n')[0]);
     const b = await client.callTool({ name: 'forge_build', arguments: { prompt: 'a spinning gold torus knot', write_files: false } });

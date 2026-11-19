@@ -26,9 +26,9 @@ const call = async (name, args = {}) => {
   return { ...r, text: r.content.map((c) => c.text).join('\n') };
 };
 
-test('lists the seven forge tools with compact descriptions', async () => {
+test('lists the eight forge tools with compact descriptions', async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ['forge_build', 'forge_catalog', 'forge_character', 'forge_health', 'forge_model', 'forge_plan', 'forge_review']);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ['forge_build', 'forge_catalog', 'forge_character', 'forge_health', 'forge_model', 'forge_plan', 'forge_review', 'forge_sculpt']);
   const size = JSON.stringify(tools).length;
   assert.ok(size < 9000, `tool definitions are ${size} chars; keep them lean (they sit in every prompt)`);
 });
@@ -36,7 +36,7 @@ test('lists the seven forge tools with compact descriptions', async () => {
 test('forge_health: all agents and sub-agents healthy', async () => {
   const r = await call('forge_health');
   assert.ok(!r.isError, r.text);
-  assert.match(r.text, /12\/12 agents · (\d+)\/\1 sub-agents/);
+  assert.match(r.text, /16\/16 agents · (\d+)\/\1 sub-agents/);
 });
 
 test('forge_build writes files and returns a short summary (no code by default)', async () => {
@@ -75,6 +75,18 @@ test('forge_character designs a person and writes a rigged model + preview', asy
   assert.match(r.text, /sheet: wizard, elder male/);
   await access(path.join(dir, 'wizard', 'model.js'));
   await access(path.join(dir, 'wizard', 'index.html'));
+});
+
+test('forge_sculpt builds a custom model and reports craft + quality', async () => {
+  const cat = await call('forge_catalog', { section: 'blueprint' });
+  const { example } = JSON.parse(cat.text).blueprint;
+  const r = await call('forge_sculpt', { blueprint: example, out_dir: 'mug' });
+  assert.ok(!r.isError, r.text);
+  assert.match(r.text, /craft \d+\/100 · quality \d+\/100/);
+  assert.ok(r.text.length < 1200, `reply is ${r.text.length} chars`);
+  await access(path.join(dir, 'mug', 'model.glb'));
+  const bad = await call('forge_sculpt', { blueprint: { parts: [{ name: 'a', shapes: [{ type: 'blob' }] }] } });
+  assert.ok(bad.isError && /type must be one of/.test(bad.text));
 });
 
 test('bad input returns an MCP error result, not a crash', async () => {

@@ -10,7 +10,7 @@ function planLayout(spec) {
   const items = [];
   // Hero row: single objects and small groups (≤3) of non-natural models, centred.
   const cast = (o) => o.kind === 'character' || o.kind === 'creature';
-  const isHero = (o) => !o.attach && !o.position && o.count <= 3 && (cast(o) || !(o.count > 1 && MODELS[o.model].natural)) && ['primitive', 'procedural', 'parametric', 'character', 'creature'].includes(o.kind);
+  const isHero = (o) => !o.attach && !o.position && o.count <= 3 && (cast(o) || !(o.count > 1 && MODELS[o.model].natural)) && ['primitive', 'procedural', 'parametric', 'character', 'creature', 'blueprint'].includes(o.kind);
   const heroes = spec.objects.filter(isHero);
   const gap = 1.2;
   const spread = space ? 2.5 : 1;

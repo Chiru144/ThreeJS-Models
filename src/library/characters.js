@@ -11,7 +11,7 @@ export const SKIN_TONES = {
   green: 0x6b8e3a, grey: 0x9aa39a, blue: 0x5a7fbf, zombie: 0x8fa57a, undead: 0xd8d4c8,
 };
 export const HAIR_COLORS = {
-  black: 0x16110d, 'dark brown': 0x2e1d12, brown: 0x5a3a20, chestnut: 0x6e3b1e, auburn: 0x8a3a1c,
+  black: 0x16110d, 'jet black': 0x0e0b09, dark: 0x22160e, 'dark brown': 0x2e1d12, 'light brown': 0x8a6440, golden: 0xd0a24e, strawberry: 0xc06a3a, brown: 0x5a3a20, chestnut: 0x6e3b1e, auburn: 0x8a3a1c,
   red: 0xa8401c, ginger: 0xb8541f, blonde: 0xd8b56a, blond: 0xd8b56a, platinum: 0xece3c8,
   grey: 0x9a9a9a, gray: 0x9a9a9a, silver: 0xc8c8cc, white: 0xeeeeee,
   blue: 0x2f6fd8, pink: 0xf28bb3, purple: 0x8a3fc7, green: 0x3c9a3c,

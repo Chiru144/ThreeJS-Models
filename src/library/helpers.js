@@ -48,7 +48,7 @@ export function instanceize(template, transforms) {
     new THREE.Matrix4().compose(p.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), s.set(sc, sc, sc)));
   template.updateMatrixWorld(true);
   template.traverse((o) => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || o.userData.shell) return;
     const im = new THREE.InstancedMesh(o.geometry, o.material, mats.length);
     for (let i = 0; i < mats.length; i++) im.setMatrixAt(i, m.multiplyMatrices(mats[i], o.matrixWorld));
     im.instanceMatrix.needsUpdate = true;
@@ -121,7 +121,8 @@ export function sculpt(nodes, opts) {
   // k: blend radius, bone, tint: [r,g,b], rot: [x,y,z], n: [amp, freq, kind] } or
   // { g: [nodes], op, k }. Shapes: ['e',cx,cy,cz,rx,ry,rz] ellipsoid, ['s',cx,cy,cz,r],
   // ['rc',ax,ay,az,bx,by,bz,ra,rb] round cone, ['b',cx,cy,cz,hx,hy,hz,r] round box,
-  // ['p',nx,ny,nz,d] half-space n.p <= d.
+  // ['cc',ax,ay,az,bx,by,bz,ra,rb] flat-capped cone/cylinder, ['t',cx,cy,cz,R,r] torus,
+  // ['p',nx,ny,nz,d] half-space n.p <= d. Extras: round (inflate), sc (non-uniform scale).
   const cell = opts.cell, INF = 1e9;
   const smin = (a, b, k) => { if (k <= 0) return Math.min(a, b); const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
   const smax = (a, b, k) => -smin(-a, -b, k);
@@ -130,6 +131,8 @@ export function sculpt(nodes, opts) {
     if (kind === 'groove') return (x, y, z) => amp * Math.sin(Math.atan2(x, z) * f + y * f * 0.08);
     if (kind === 'vgroove') return (x, y, z) => amp * Math.sin(x * f + Math.sin(y * f * 0.12) * 1.5);
     if (kind === 'curl') return (x, y, z) => amp * Math.sin(x * f) * Math.sin(y * f) * Math.sin(z * f);
+    if (kind === 'rows') return (x, y, z) => amp * Math.abs(Math.sin(y * f)) ** 0.35 * -1; // tile / plank / brick courses
+    if (kind === 'tread') return (x, y, z) => amp * (Math.sin(Math.atan2(y, x) * f) > 0.3 ? 1 : 0); // tyre tread around z
     if (kind === 'fold') return (x, y, z) => amp * (Math.sin(y * f + Math.sin(x * f * 0.7) * 2) * 0.7 + Math.sin(z * f * 1.3 + x * f * 0.5) * 0.3);
     return (x, y, z) => amp * (Math.sin(x * f + Math.sin(z * f * 0.71)) * Math.sin(y * f * 1.13 + Math.sin(x * f * 0.53)) * Math.sin(z * f * 0.87 + 1.3));
   };
@@ -151,13 +154,15 @@ export function sculpt(nodes, opts) {
       const e = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...node.rot)).invert().elements;
       R = e;
     }
+    // world-axis half extents of a local box (hx,hy,hz) under this node's rotation (R is the inverse rotation)
+    const obb = (hx, hy, hz) => (R ? [Math.abs(R[0]) * hx + Math.abs(R[1]) * hy + Math.abs(R[2]) * hz, Math.abs(R[4]) * hx + Math.abs(R[5]) * hy + Math.abs(R[6]) * hz, Math.abs(R[8]) * hx + Math.abs(R[9]) * hy + Math.abs(R[10]) * hz] : [hx, hy, hz]);
     const local = (cx, cy, cz, g) => (R
       ? (x, y, z) => { const px = x - cx, py = y - cy, pz = z - cz; return g(R[0] * px + R[4] * py + R[8] * pz, R[1] * px + R[5] * py + R[9] * pz, R[2] * px + R[6] * py + R[10] * pz); }
       : (x, y, z) => g(x - cx, y - cy, z - cz));
     if (t === 'e') {
       const [, cx, cy, cz, rx, ry, rz] = s;
       f = local(cx, cy, cz, (x, y, z) => { const a = x / rx, b = y / ry, c = z / rz; const k0 = Math.sqrt(a * a + b * b + c * c); const k1 = Math.sqrt((a / rx) ** 2 + (b / ry) ** 2 + (c / rz) ** 2); return k1 < 1e-9 ? -Math.min(rx, ry, rz) : (k0 * (k0 - 1)) / k1; });
-      const m = Math.max(rx, ry, rz); box = [cx - m, cy - m, cz - m, cx + m, cy + m, cz + m];
+      const ex = obb(rx, ry, rz); box = [cx - ex[0], cy - ex[1], cz - ex[2], cx + ex[0], cy + ex[1], cz + ex[2]];
     } else if (t === 's') {
       const [, cx, cy, cz, r] = s;
       f = (x, y, z) => Math.hypot(x - cx, y - cy, z - cz) - r;
@@ -177,12 +182,28 @@ export function sculpt(nodes, opts) {
     } else if (t === 'b') {
       const [, cx, cy, cz, hx, hy, hz, r] = s;
       f = local(cx, cy, cz, (x, y, z) => { const qx = Math.abs(x) - hx + r, qy = Math.abs(y) - hy + r, qz = Math.abs(z) - hz + r; return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - r; });
-      const m = Math.hypot(hx, hy, hz); box = [cx - m, cy - m, cz - m, cx + m, cy + m, cz + m];
+      const ex = obb(hx, hy, hz); box = [cx - ex[0], cy - ex[1], cz - ex[2], cx + ex[0], cy + ex[1], cz + ex[2]];
+    } else if (t === 'cc') { // capped cone / cylinder with flat ends (hard-surface): a, b, ra, rb
+      const [, ax, ay, az, bx, by, bz, ra, rb] = s;
+      const bax = bx - ax, bay = by - ay, baz = bz - az, baba = bax * bax + bay * bay + baz * baz, rba = rb - ra, kq = rba * rba + baba;
+      f = (x, y, z) => {
+        const pax = x - ax, pay = y - ay, paz = z - az, papa = pax * pax + pay * pay + paz * paz, paba = (pax * bax + pay * bay + paz * baz) / baba;
+        const xx = Math.sqrt(Math.max(0, papa - paba * paba * baba));
+        const cax = Math.max(0, xx - (paba < 0.5 ? ra : rb)), cay = Math.abs(paba - 0.5) - 0.5;
+        const ff = Math.min(1, Math.max(0, (rba * (xx - ra) + paba * baba) / kq)), cbx = xx - ra - ff * rba, cby = paba - ff;
+        return (cbx < 0 && cay < 0 ? -1 : 1) * Math.sqrt(Math.min(cax * cax + cay * cay * baba, cbx * cbx + cby * cby * baba));
+      };
+      const m = Math.max(ra, rb); box = [Math.min(ax, bx) - m, Math.min(ay, by) - m, Math.min(az, bz) - m, Math.max(ax, bx) + m, Math.max(ay, by) + m, Math.max(az, bz) + m];
+    } else if (t === 't') { // torus around the local y axis (use rot to orient): centre, R, r
+      const [, cx, cy, cz, R0, r0] = s;
+      f = local(cx, cy, cz, (x, y, z) => Math.hypot(Math.hypot(x, z) - R0, y) - r0);
+      const m = R0 + r0; box = [cx - m, cy - m, cz - m, cx + m, cy + m, cz + m];
     } else if (t === 'p') {
       const [, nx, ny, nz, d] = s;
       f = (x, y, z) => nx * x + ny * y + nz * z - d;
       box = [-INF, -INF, -INF, INF, INF, INF];
     }
+    if (node.round) { const g1 = f, rd = node.round; f = (x, y, z) => g1(x, y, z) - rd; box = box.map((q, i) => (i < 3 ? q - rd : q + rd)); }
     if (node.sc) {
       const [cx, cy, cz, sx, sy, sz] = node.sc, g0 = f, mn = Math.min(sx, sy, sz);
       f = (x, y, z) => g0(cx + (x - cx) / sx, cy + (y - cy) / sy, cz + (z - cz) / sz) * mn;
@@ -277,6 +298,9 @@ export function sculpt(nodes, opts) {
     }
   }
   // refine: project onto the surface, SDF normals, AO, weights, colour
+  // every solid leaf knows its order, its top-level group and that group's blend radius (for skin weights)
+  let leafOrder = 0;
+  top.forEach((t, gi) => { const tag = (c) => { if (c.kids) c.kids.forEach(tag); else if (c.op === 'u') { c.ord = leafOrder++; c.gid = gi; c.gk = t.kids ? t.k : c.k; } }; tag(t); });
   const leafCache = new Map();
   const leavesOf = (list) => {
     if (!leafCache.has(list)) { const out = []; const collect = (c) => { if (c.kids) c.kids.forEach(collect); else if (c.op === 'u') out.push(c); }; list.forEach(collect); leafCache.set(list, out); }
@@ -295,6 +319,10 @@ export function sculpt(nodes, opts) {
   };
   const g = [0, 0, 0], aoScale = opts.aoScale ?? cell * 4, aoK = opts.ao ?? 1;
   const bw = new Map();
+  const BP = opts.boneParents || null, wr = opts.weightRadius ?? cell * 4.5;
+  // kin = within two steps in the skeleton tree (same bone, parent/child, siblings, grandparent)
+  const up = (b) => (b >= 0 && BP[b] !== undefined ? BP[b] : -1);
+  const kin = (a, b) => a === b || up(a) === b || up(b) === a || (up(a) >= 0 && up(a) === up(b)) || up(up(a)) === b || up(up(b)) === a;
   for (let v = 0; v < nv; v++) {
     let x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
     { const d = sdf(x, y, z); grad(x, y, z, g); x -= g[0] * d; y -= g[1] * d; z -= g[2] * d; }
@@ -305,12 +333,23 @@ export function sculpt(nodes, opts) {
     const ao = Math.max(0.25, Math.min(1, 1 - aoK * occ / (aoScale * 3)));
     // skin weights + tint from nearby primitives
     const leaves = leavesOf(listAt(x, y, z));
-    let dmin = INF; const ds = leaves.map((c) => { const d = c.f(x, y, z); if (d < dmin) dmin = d; return d; });
+    let dmin = INF, jmin = 0; const ds = leaves.map((c, i) => { const d = c.f(x, y, z); if (d < dmin) { dmin = d; jmin = i; } return d; });
     bw.clear();
     let tr = 0, tg = 0, tb = 0, tw = 0;
+    const near = leaves[jmin];
     leaves.forEach((c, i) => {
-      const fall = c.wk ?? (c.k * 0.6 + cell);
-      const w = Math.exp(-(ds[i] - dmin) / fall);
+      // Skin weights blend only across real joints (bones within two steps of each other in the skeleton) and only within the
+      // blend radius around the surface the vertex sits on. Parts that are merely close - a cuff beside
+      // the hip, one leg beside the other - get no influence, so nothing tears when the rig moves.
+      let w = 1;
+      if (c !== near) {
+        if (BP && !kin(c.bone, near.bone)) w = 0; // not across a real joint
+        else {
+          const kp = c.wk ?? Math.max(wr, c.gid === near.gid ? (c.ord > near.ord ? c.k : near.k) : (c.gid > near.gid ? c.gk : near.gk));
+          const u = 1 - (ds[i] - dmin) / (kp + cell * 0.75);
+          w = u > 0 ? u * u : 0;
+        }
+      }
       if (w > 1e-3) bw.set(c.bone, (bw.get(c.bone) || 0) + w);
       const wt = Math.exp(-(ds[i] - dmin) / (cell * 0.8 + c.k * 0.15));
       const t = c.tint || [1, 1, 1];
@@ -322,7 +361,122 @@ export function sculpt(nodes, opts) {
     if (!top4.length) skinWeight[v * 4] = 1;
     const c = [tr / tw, tg / tw, tb / tw];
     if (opts.paint) opts.paint(x, y, z, c, g);
-    color[v * 3] = c[0] * ao; color[v * 3 + 1] = c[1] * ao; color[v * 3 + 2] = c[2] * ao;
+    color[v * 3] = Math.min(1, c[0] * ao); color[v * 3 + 1] = Math.min(1, c[1] * ao); color[v * 3 + 2] = Math.min(1, c[2] * ao); // clamped: valid glTF COLOR_0
+  }
+  // ---- repair: on features thinner than the grid the SDF gradient can point the wrong way; where it
+  // disagrees with the mesh itself, fall back to the geometric normal
+  {
+    const gn = new Float32Array(nv * 3);
+    for (let i = 0; i < index.length; i += 3) {
+      const a = index[i] * 3, b = index[i + 1] * 3, c = index[i + 2] * 3;
+      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2], vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+      const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+      for (const q of [a, b, c]) { gn[q] += fx; gn[q + 1] += fy; gn[q + 2] += fz; }
+    }
+    for (let v = 0; v < nv; v++) {
+      const l = Math.hypot(gn[v * 3], gn[v * 3 + 1], gn[v * 3 + 2]);
+      if (l < 1e-20) continue;
+      const d = (gn[v * 3] * normal[v * 3] + gn[v * 3 + 1] * normal[v * 3 + 1] + gn[v * 3 + 2] * normal[v * 3 + 2]) / l;
+      if (d < 0.35) { normal[v * 3] = gn[v * 3] / l; normal[v * 3 + 1] = gn[v * 3 + 1] / l; normal[v * 3 + 2] = gn[v * 3 + 2] / l; }
+    }
+  }
+  // ---- debris: drop tiny disconnected fragments left by cuts or sub-grid features
+  {
+    const parent = new Int32Array(nv); for (let i = 0; i < nv; i++) parent[i] = i;
+    const find = (q) => { while (parent[q] !== q) { parent[q] = parent[parent[q]]; q = parent[q]; } return q; };
+    for (let i = 0; i < index.length; i += 3) { const r0 = find(index[i]), r1 = find(index[i + 1]), r2 = find(index[i + 2]); if (r1 !== r0) parent[r1] = r0; if (r2 !== r0) parent[r2] = r0; }
+    const size = new Map(); for (let v = 0; v < nv; v++) { const r = find(v); size.set(r, (size.get(r) || 0) + 1); }
+    if (size.size > 1) {
+      const limit = Math.max(16, nv * 0.0015);
+      const kept = []; for (let i = 0; i < index.length; i += 3) if (size.get(find(index[i])) >= limit) kept.push(index[i], index[i + 1], index[i + 2]);
+      if (kept.length && kept.length < index.length) { index.length = 0; for (const q of kept) index.push(q); }
+    }
+  }
+  const T2 = performance.now();
+  // ---- adaptive optimisation: collapse vertices whose surroundings are flat (within `simplify` degrees),
+  // similarly coloured and skinned alike. Curved / detailed regions keep their full density.
+  let outIndex = index, keep = null;
+  const tol = opts.simplify ?? 0;
+  if (tol > 0 && nv > 200) {
+    const cosT = Math.cos((tol * Math.PI) / 180), cosN = Math.cos((tol * 2.2 * Math.PI) / 180), colTol = opts.colorTol ?? 0.05;
+    const F = Int32Array.from(index), nf = F.length / 3, alive = new Uint8Array(nf).fill(1), dead = new Uint8Array(nv);
+    const vf = Array.from({ length: nv }, () => []);
+    for (let f = 0; f < nf; f++) { vf[F[f * 3]].push(f); vf[F[f * 3 + 1]].push(f); vf[F[f * 3 + 2]].push(f); }
+    const fn = [0, 0, 0];
+    const faceN = (i0, i1, i2) => {
+      const ax = pos[i1 * 3] - pos[i0 * 3], ay = pos[i1 * 3 + 1] - pos[i0 * 3 + 1], az = pos[i1 * 3 + 2] - pos[i0 * 3 + 2];
+      const bx2 = pos[i2 * 3] - pos[i0 * 3], by2 = pos[i2 * 3 + 1] - pos[i0 * 3 + 1], bz2 = pos[i2 * 3 + 2] - pos[i0 * 3 + 2];
+      fn[0] = ay * bz2 - az * by2; fn[1] = az * bx2 - ax * bz2; fn[2] = ax * by2 - ay * bx2;
+      const l = Math.hypot(fn[0], fn[1], fn[2]);
+      if (l < 1e-14) return 0;
+      fn[0] /= l; fn[1] /= l; fn[2] /= l;
+      return l;
+    };
+    const locked = new Uint8Array(nv);
+    for (let pass = 0; pass < 8; pass++) {
+      locked.fill(0);
+      let done = 0;
+      for (let a = 0; a < nv; a++) {
+        if (dead[a] || locked[a]) continue;
+        const fa = vf[a];
+        if (fa.length < 3 || fa.length > 12) continue;
+        // the fan around `a` must be flat: every face normal close to a's surface normal
+        const nax = normal[a * 3], nay = normal[a * 3 + 1], naz = normal[a * 3 + 2];
+        let flat = true;
+        for (const f of fa) { if (!faceN(F[f * 3], F[f * 3 + 1], F[f * 3 + 2]) || fn[0] * nax + fn[1] * nay + fn[2] * naz < cosT) { flat = false; break; } }
+        if (!flat) continue;
+        // candidate targets: neighbours with matching normal, colour and skinning; nearest first
+        const nb = [];
+        for (const f of fa) for (let k = 0; k < 3; k++) { const q = F[f * 3 + k]; if (q !== a && !nb.includes(q)) nb.push(q); }
+        let target = -1, bestD = Infinity;
+        for (const b2 of nb) {
+          if (locked[b2]) continue;
+          if (normal[b2 * 3] * nax + normal[b2 * 3 + 1] * nay + normal[b2 * 3 + 2] * naz < cosT) continue;
+          if (Math.abs(color[a * 3] - color[b2 * 3]) + Math.abs(color[a * 3 + 1] - color[b2 * 3 + 1]) + Math.abs(color[a * 3 + 2] - color[b2 * 3 + 2]) > colTol) continue;
+          if (skinIndex[a * 4] !== skinIndex[b2 * 4] || Math.abs(skinWeight[a * 4] - skinWeight[b2 * 4]) > 0.15) continue;
+          const d = (pos[a * 3] - pos[b2 * 3]) ** 2 + (pos[a * 3 + 1] - pos[b2 * 3 + 1]) ** 2 + (pos[a * 3 + 2] - pos[b2 * 3 + 2]) ** 2;
+          if (d < bestD) { bestD = d; target = b2; }
+        }
+        if (target < 0) continue;
+        // link condition (keeps the mesh manifold): a and target share exactly two neighbours
+        let shared = 0;
+        const fb = vf[target];
+        for (const q of nb) { if (q === target) continue; let has = false; for (const f of fb) { if (F[f * 3] === q || F[f * 3 + 1] === q || F[f * 3 + 2] === q) { has = true; break; } } if (has) shared++; }
+        if (shared !== 2) continue;
+        // no face may flip or drift off the surface
+        let ok = true;
+        for (const f of fa) {
+          const i0 = F[f * 3], i1 = F[f * 3 + 1], i2 = F[f * 3 + 2];
+          if (i0 === target || i1 === target || i2 === target) continue;
+          const j0 = i0 === a ? target : i0, j1 = i1 === a ? target : i1, j2 = i2 === a ? target : i2;
+          if (!faceN(j0, j1, j2)) { ok = false; break; }
+          const mx = normal[j0 * 3] + normal[j1 * 3] + normal[j2 * 3], my = normal[j0 * 3 + 1] + normal[j1 * 3 + 1] + normal[j2 * 3 + 1], mz = normal[j0 * 3 + 2] + normal[j1 * 3 + 2] + normal[j2 * 3 + 2];
+          if ((fn[0] * mx + fn[1] * my + fn[2] * mz) / (Math.hypot(mx, my, mz) || 1) < cosN) { ok = false; break; }
+        }
+        if (!ok) continue;
+        for (const f of fa) {
+          const i0 = F[f * 3], i1 = F[f * 3 + 1], i2 = F[f * 3 + 2];
+          if (i0 === target || i1 === target || i2 === target) { alive[f] = 0; for (const q of [i0, i1, i2]) if (q !== a) { const l = vf[q], ix = l.indexOf(f); if (ix >= 0) l.splice(ix, 1); } }
+          else { if (i0 === a) F[f * 3] = target; else if (i1 === a) F[f * 3 + 1] = target; else F[f * 3 + 2] = target; fb.push(f); }
+        }
+        vf[a] = []; dead[a] = 1; done++;
+        locked[target] = 1; for (const q of nb) locked[q] = 1;
+      }
+      if (done < nv * 0.004) break;
+    }
+    keep = new Int32Array(nv).fill(-1);
+    let m = 0;
+    for (let v = 0; v < nv; v++) if (!dead[v]) keep[v] = m++;
+    outIndex = [];
+    for (let f = 0; f < nf; f++) if (alive[f]) outIndex.push(keep[F[f * 3]], keep[F[f * 3 + 1]], keep[F[f * 3 + 2]]);
+    const pack = (src, size, C) => { const out = new C(m * size); for (let v = 0; v < nv; v++) if (keep[v] >= 0) for (let k = 0; k < size; k++) out[keep[v] * size + k] = src[v * size + k]; return out; };
+    const P2 = pack(pos, 3, Float32Array), N2 = pack(normal, 3, Float32Array), C2 = pack(color, 3, Float32Array), I2 = pack(skinIndex, 4, Uint16Array), W2 = pack(skinWeight, 4, Float32Array);
+    if (globalThis.SCULPT_PROFILE) console.log('  simplify', nv, '->', m, 'verts', (performance.now() - T2).toFixed(0), 'ms');
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.BufferAttribute(P2, 3)); g2.setAttribute('normal', new THREE.BufferAttribute(N2, 3)); g2.setAttribute('color', new THREE.BufferAttribute(C2, 3));
+    g2.setAttribute('skinIndex', new THREE.BufferAttribute(I2, 4)); g2.setAttribute('skinWeight', new THREE.BufferAttribute(W2, 4));
+    g2.setIndex(outIndex);
+    return g2;
   }
   if (globalThis.SCULPT_PROFILE) console.log('sculpt', nx, ny, nz, 'grid', (T1 - T0).toFixed(0), 'refine', (performance.now() - T1).toFixed(0), 'verts', nv);
   const geo = new THREE.BufferGeometry();
@@ -356,12 +510,13 @@ export function rigKit(M, spec, lod) {
   const PL = (n, pt, o) => { const l = Math.hypot(...n); const nn = n.map((q) => q / l); return { s: ['p', ...nn, nn[0] * pt[0] + nn[1] * pt[1] + nn[2] * pt[2]], op: 'i', ...bo(o) }; };
   const G = (g, o) => ({ g, ...bo(o) });
   const cache = (sculpt.cache ||= new Map());
+  const boneParents = spec.map(([, par]) => (par ? B[par] : -1));
   const make = (nodes, cell, material, opts = {}) => {
     const list = nodes.filter(Boolean);
     if (!list.length) return null;
-    const key = JSON.stringify([list, cell, opts.ao, lod, opts.paintKey]);
+    const key = JSON.stringify([list, cell, opts.ao, lod, opts.paintKey, boneParents]);
     let geo = cache.get(key);
-    if (!geo) { geo = sculpt(list, { cell: cell * lod, ao: opts.ao ?? 1, paint: opts.paint }); cache.set(key, geo); }
+    if (!geo) { geo = sculpt(list, { cell: cell * lod, ao: opts.ao ?? 1, paint: opts.paint, simplify: opts.simplify ?? 3.5, colorTol: opts.colorTol ?? 0.06, boneParents }); cache.set(key, geo); }
     const mesh = new THREE.SkinnedMesh(geo, material);
     mesh.frustumCulled = false;
     root.add(mesh);
@@ -425,7 +580,7 @@ export function rigKit(M, spec, lod) {
     }
     return [d1, d2];
   };
-  return { root, bones, B, at, skeleton, E, S, RC, RB, PL, G, make, eye, vnoise, worley };
+  return { root, bones, B, at, skeleton, boneParents, E, S, RC, RB, PL, G, make, eye, vnoise, worley };
 }
 
 export function surfaceTex(kind, size = 256) {
@@ -510,4 +665,78 @@ export function grassField(count, radius, color, seed, occupied, ticks) {
   im.userData.noCast = true;
   ticks.push((t) => { time.value = t; });
   return im;
+}
+
+export function detailize(material, kind, freq, amp = 1) {
+  // Procedural micro-detail (no textures, no UVs): perturbs the shading normal and roughness from a 3D
+  // pattern in bind-pose object space, so it sticks to skinned meshes. Fades out with distance (no shimmer).
+  if (!material || material.userData.detail) return material;
+  material.userData.detail = kind;
+  const pattern = {
+    pores: 'fn3(p) * 0.55 + fn3(p * 2.7) * 0.45',
+    weave: 'abs(sin(p.x * 3.1416)) * abs(sin(p.y * 3.1416 + p.z * 3.1416)) * 0.8 + fn3(p * 3.0) * 0.2',
+    knit: 'abs(sin(p.y * 3.1416 + sin(p.x * 6.2832) * 0.6)) * 0.85 + fn3(p * 2.0) * 0.15',
+    scales: '1.0 - min(1.0, length(fract(p + vec3(0.0, floor(p.x) * 0.5, floor(p.x) * 0.5)) - 0.5) * 1.7)',
+    grain: 'fn3(p) * 0.5 + fn3(p * 2.1) * 0.3 + fn3(p * 4.7) * 0.2',
+    bark: 'fn3(p * vec3(1.0, 0.12, 1.0)) * 0.7 + fn3(p * vec3(2.3, 0.4, 2.3)) * 0.3',
+    brushed: 'fn3(p * vec3(1.0, 28.0, 1.0))',
+    leather: '1.0 - smoothstep(0.0, 0.25, abs(fn3(p) - 0.5)) * 0.7 - fn3(p * 3.0) * 0.3',
+  }[kind] || 'fn3(p)';
+  material.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying vec3 vObjPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjPos = position;');
+    sh.fragmentShader = `varying vec3 vObjPos;
+float fh3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float fn3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(fh3(i), fh3(i + vec3(1, 0, 0)), f.x), mix(fh3(i + vec3(0, 1, 0)), fh3(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(fh3(i + vec3(0, 0, 1)), fh3(i + vec3(1, 0, 1)), f.x), mix(fh3(i + vec3(0, 1, 1)), fh3(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
+float fdetail(vec3 p) { return ${pattern}; }
+` + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  {
+    vec3 dp = vObjPos * ${freq.toFixed(2)};
+    float fade = clamp(1.0 - length(fwidth(dp)) * 0.75, 0.0, 1.0); // sub-pixel detail fades instead of aliasing
+    float hgt = fdetail(dp);
+    vec2 dH = vec2(dFdx(hgt), dFdy(hgt)) * ${(amp * 0.9).toFixed(3)} * fade;
+    vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
+    vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+    float det = dot(sx, r1) * faceDirection;
+    normal = normalize(abs(det) * normal - sign(det) * (dH.x * r1 + dH.y * r2));
+    roughnessFactor = clamp(roughnessFactor * (1.0 + ${(Math.min(amp, 1) * 0.28).toFixed(3)} * (hgt - 0.5) * fade), 0.03, 1.0);
+  }`);
+  };
+  material.customProgramCacheKey = () => `detail-${kind}-${freq.toFixed(2)}-${amp}`;
+  return material;
+}
+
+export function furShells(root, mesh, fur) {
+  // Shell fur: the coat is drawn again in thin offset layers; each layer keeps only "strand" cells, which
+  // taper towards the tip. Strands are cells of a 3D lattice in bind-pose space, so fur follows the skin.
+  const { len, density, shells = 8, tip = 1.25, rootShade = 0.55 } = fur;
+  const out = [];
+  for (let i = 1; i <= shells; i++) {
+    const h = i / shells, m = mesh.material.clone();
+    m.userData = { shell: h };
+    const uni = { uShell: { value: h } };
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uShell = uni.uShell;
+      sh.vertexShader = 'uniform float uShell;\nvarying vec3 vFurPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  vFurPos = position;\n  transformed += normal * (uShell * ${len.toFixed(5)});`);
+      sh.fragmentShader = `uniform float uShell;\nvarying vec3 vFurPos;\nfloat furHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n` + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+  {
+    vec3 fp = vFurPos * ${density.toFixed(2)};
+    vec3 cellId = floor(fp);
+    float strand = 0.35 + 0.65 * furHash(cellId);           // strand length varies
+    float dist = length(fract(fp) - 0.5);                    // distance from the strand's centre
+    if (uShell > strand || dist > 0.62 * (1.0 - uShell / strand) + 0.05) discard;
+    diffuseColor.rgb *= mix(${rootShade.toFixed(2)}, ${tip.toFixed(2)}, uShell) * (0.9 + 0.2 * furHash(cellId + 7.0));
+  }`);
+    };
+    m.customProgramCacheKey = () => `fur-${len.toFixed(5)}-${density.toFixed(2)}-${tip}-${rootShade}`;
+    const s = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, m) : new THREE.Mesh(mesh.geometry, m);
+    s.frustumCulled = false;
+    s.userData = { shell: true, noCast: true };
+    s.name = `${mesh.name || 'coat'}_fur${i}`;
+    root.add(s);
+    if (mesh.isSkinnedMesh) s.bind(mesh.skeleton, new THREE.Matrix4());
+    out.push(s);
+  }
+  return out;
 }
