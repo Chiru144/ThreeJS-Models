@@ -318,6 +318,7 @@ export function sculpt(nodes, opts) {
     const l = Math.hypot(out[0], out[1], out[2]) || 1; out[0] /= l; out[1] /= l; out[2] /= l;
   };
   const g = [0, 0, 0], aoScale = opts.aoScale ?? cell * 4, aoK = opts.ao ?? 1;
+  const aoV = new Float32Array(nv), baseC = new Float32Array(nv * 3);
   const bw = new Map();
   const BP = opts.boneParents || null, wr = opts.weightRadius ?? cell * 4.5;
   // kin = within two steps in the skeleton tree (same bone, parent/child, siblings, grandparent)
@@ -361,7 +362,18 @@ export function sculpt(nodes, opts) {
     if (!top4.length) skinWeight[v * 4] = 1;
     const c = [tr / tw, tg / tw, tb / tw];
     if (opts.paint) opts.paint(x, y, z, c, g);
-    color[v * 3] = Math.min(1, c[0] * ao); color[v * 3 + 1] = Math.min(1, c[1] * ao); color[v * 3 + 2] = Math.min(1, c[2] * ao); // clamped: valid glTF COLOR_0
+    aoV[v] = ao; baseC[v * 3] = c[0]; baseC[v * 3 + 1] = c[1]; baseC[v * 3 + 2] = c[2];
+  }
+  // occlusion is smoothed over the mesh (two passes over neighbours): single vertices sampled deep in a crease
+  // would otherwise show as dark specks along it
+  {
+    const acc = new Float32Array(nv), cnt = new Float32Array(nv);
+    for (let it = 0; it < 2; it++) {
+      acc.set(aoV); cnt.fill(1);
+      for (let i = 0; i < index.length; i += 3) for (let e = 0; e < 3; e++) { const a = index[i + e], b = index[i + (e + 1) % 3]; acc[a] += aoV[b]; cnt[a]++; acc[b] += aoV[a]; cnt[b]++; }
+      for (let v = 0; v < nv; v++) aoV[v] = acc[v] / cnt[v];
+    }
+    for (let v = 0; v < nv; v++) for (let k = 0; k < 3; k++) color[v * 3 + k] = Math.min(1, baseC[v * 3 + k] * aoV[v]); // clamped: valid glTF COLOR_0
   }
   // ---- repair: on features thinner than the grid the SDF gradient can point the wrong way; where it
   // disagrees with the mesh itself, fall back to the geometric normal
@@ -667,10 +679,17 @@ export function grassField(count, radius, color, seed, occupied, ticks) {
   return im;
 }
 
-export function detailize(material, kind, freq, amp = 1) {
+export function detailize(material, kind, freq, amp = 1, print = null) {
+  // print (optional): a woven colour pattern { kind: 'plaid'|'stripes'|'checks'|'dots', scale: metres per repeat }
   // Procedural micro-detail (no textures, no UVs): perturbs the shading normal and roughness from a 3D
   // pattern in bind-pose object space, so it sticks to skinned meshes. Fades out with distance (no shimmer).
   if (!material || material.userData.detail) return material;
+  const printFn = print && {
+    plaid: 'float a = smoothstep(0.42, 0.46, abs(fract(q.x) - 0.5)), b = smoothstep(0.42, 0.46, abs(fract(q.y) - 0.5)); float wa = step(0.5, fract(q.x)), wb = step(0.5, fract(q.y)); float l = max(step(0.955, fract(q.x * 2.0 + 0.1)), step(0.955, fract(q.y * 2.0 + 0.1))); diffuseColor.rgb *= 1.0 - 0.32 * wa - 0.32 * wb + 0.1 * wa * wb; diffuseColor.rgb *= 1.0 - 0.45 * max(a, b); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.88, 0.82), l * 0.4);', // tartan: dark warp and weft bands, crossing darker, thin light overcheck
+    stripes: 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.92, 0.9), step(0.55, fract(q.y)));',
+    checks: 'float c = mod(floor(q.x) + floor(q.y) + floor(q.z), 2.0); diffuseColor.rgb *= 0.55 + 0.45 * c;',
+    dots: 'vec3 f = fract(q + vec3(0.0, floor(q.x) * 0.5, 0.0)) - 0.5; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.94, 0.92), 1.0 - smoothstep(0.17, 0.21, length(f.xy)));',
+  }[print.kind];
   material.userData.detail = kind;
   const pattern = {
     pores: 'fn3(p) * 0.55 + fn3(p * 2.7) * 0.45',
@@ -684,6 +703,8 @@ export function detailize(material, kind, freq, amp = 1) {
   }[kind] || 'fn3(p)';
   material.onBeforeCompile = (sh) => {
     sh.vertexShader = 'varying vec3 vObjPos;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjPos = position;');
+    if (printFn) sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+  { vec3 q = vObjPos / ${print.scale.toFixed(4)}; ${printFn} }`);
     sh.fragmentShader = `varying vec3 vObjPos;
 float fh3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float fn3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -695,7 +716,7 @@ float fdetail(vec3 p) { return ${pattern}; }
     vec3 dp = vObjPos * ${freq.toFixed(2)};
     float fade = clamp(1.0 - length(fwidth(dp)) * 0.75, 0.0, 1.0); // sub-pixel detail fades instead of aliasing
     float hgt = fdetail(dp);
-    vec2 dH = vec2(dFdx(hgt), dFdy(hgt)) * ${(amp * 0.9).toFixed(3)} * fade;
+    vec2 dH = vec2(dFdx(hgt), dFdy(hgt)) * ${(amp * 0.3 / freq).toExponential(3)} * fade; // height in metres: a fraction of one pattern cell
     vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
     vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
     float det = dot(sx, r1) * faceDirection;
@@ -703,7 +724,7 @@ float fdetail(vec3 p) { return ${pattern}; }
     roughnessFactor = clamp(roughnessFactor * (1.0 + ${(Math.min(amp, 1) * 0.28).toFixed(3)} * (hgt - 0.5) * fade), 0.03, 1.0);
   }`);
   };
-  material.customProgramCacheKey = () => `detail-${kind}-${freq.toFixed(2)}-${amp}`;
+  material.customProgramCacheKey = () => `detail-${kind}-${freq.toFixed(2)}-${amp}-${print ? print.kind + print.scale : ''}`;
   return material;
 }
 

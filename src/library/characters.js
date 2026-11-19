@@ -6,7 +6,7 @@
 
 // Realistic skin tones (light → deep) plus fantasy tones.
 export const SKIN_TONES = {
-  pale: 0xf3d7c6, fair: 0xeac3a6, light: 0xe0ac8a, medium: 0xc68e6a, olive: 0xb98a5e,
+  pale: 0xecc4ae, fair: 0xe4b797, light: 0xe0ac8a, medium: 0xc68e6a, olive: 0xb98a5e,
   tan: 0xa8714c, brown: 0x8d5a3b, dark: 0x6b3f2a, deep: 0x4a2a1c,
   green: 0x6b8e3a, grey: 0x9aa39a, blue: 0x5a7fbf, zombie: 0x8fa57a, undead: 0xd8d4c8,
 };
@@ -29,8 +29,8 @@ export const BUILDS = { slim: { girth: 0.86, shoulders: 0.95 }, average: { girth
 
 export const OUTFITS = ['casual', 'tshirt', 'sport', 'suit', 'dress', 'hoodie', 'sweater', 'armor', 'robe', 'uniform', 'labcoat', 'spacesuit', 'ninja', 'royal', 'rags'];
 export const HATS = ['none', 'cap', 'tophat', 'wizard', 'crown', 'helmet', 'hardhat', 'cowboy', 'beanie', 'chef', 'police', 'pirate', 'astronaut', 'hood'];
-export const PROPS = ['none', 'sword', 'staff', 'wand', 'shield', 'swordshield', 'torch', 'book', 'briefcase'];
-export const HAIR_STYLES = ['short', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'afro', 'bald', 'mohawk', 'spiky', 'bob'];
+export const PROPS = ['none', 'sword', 'staff', 'wand', 'shield', 'swordshield', 'torch', 'book', 'briefcase', 'cane'];
+export const HAIR_STYLES = ['short', 'buzz', 'long', 'ponytail', 'braid', 'pigtails', 'bun', 'curly', 'afro', 'bald', 'mohawk', 'spiky', 'bob'];
 
 /**
  * Archetypes: high-level traits the agent starts from. Anything the user says
@@ -198,7 +198,7 @@ function makeHuman(THREE, M, p, main) {
         for (const s of [-1, 1]) add(head, new THREE.CapsuleGeometry(HU * 0.1, HU * 0.7, 4, 10), HAIR, s * rx * 0.92, cy - HU * 0.35, -rz * 0.05);
       }
       if (hair === 'bob') add(head, new THREE.CylinderGeometry(rx * 1.12, rx * 1.18, HU * 0.55, 24, 1, true), mat(hairC, 0.65, 0, { side: THREE.DoubleSide }), 0, cy - HU * 0.12, -HU * 0.04, 1, 1, rz / rx);
-      if (hair === 'ponytail') { const t = add(head, new THREE.CapsuleGeometry(HU * 0.1, HU * 0.6, 4, 10), HAIR, 0, cy - HU * 0.15, -rz * 1.15); t.rotation.x = 0.35; }
+      if (hair === 'ponytail' || hair === 'braid' || hair === 'pigtails') { const t = add(head, new THREE.CapsuleGeometry(HU * 0.1, HU * 0.6, 4, 10), HAIR, 0, cy - HU * 0.15, -rz * 1.15); t.rotation.x = 0.35; }
       if (hair === 'bun') add(head, S(HU * 0.2, 16, 12), HAIR, 0, cy + HU * 0.38, -rz * 0.75);
     }
   }

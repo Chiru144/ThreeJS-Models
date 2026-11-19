@@ -8,7 +8,7 @@ import { buildModel } from '../core/sandbox.js';
 const GROOM = {
   horse: [0.012, 150], pony: [0.03, 110], zebra: [0.012, 150], unicorn: [0.015, 150], pegasus: [0.015, 150], cow: [0.02, 130], bull: [0.02, 130], deer: [0.025, 130], goat: [0.05, 100], giraffe: [0.012, 160],
   dog: [0.07, 90], puppy: [0.11, 70], wolf: [0.09, 85], fox: [0.11, 80], cat: [0.09, 90], lion: [0.04, 110], tiger: [0.045, 110], bear: [0.09, 80], 'polar bear': [0.09, 80],
-  rabbit: [0.13, 70], mouse: [0.11, 70], sheep: [0.1, 55], pig: [0.008, 160],
+  rabbit: [0.13, 70], mouse: [0.11, 70], sheep: [0.1, 55],
 };
 const SHELLS = { low: 0, medium: 7, high: 12 };
 

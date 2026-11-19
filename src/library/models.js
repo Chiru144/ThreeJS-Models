@@ -7,7 +7,7 @@
 /* eslint-disable no-undef */
 import { REAL_HUMAN_FACTORY } from './human.js';
 import { HUMAN_FACTORY, ARCHETYPES, OUTFITS, HATS, PROPS, HAIR_STYLES, AGES, BUILDS } from './characters.js';
-import { CREATURE_FACTORIES, SPECIES } from './creatures.js';
+import { CREATURE_FACTORIES, SPECIES, BREEDS } from './creatures.js';
 import { REAL_CREATURE_FACTORIES } from './beasts.js';
 import { REAL_PROPS } from './props.js';
 import { BLUEPRINT_FACTORY } from './blueprint.js';
@@ -322,10 +322,10 @@ function characterModels() {
       params: {
         archetype: E('person', Object.keys(ARCHETYPES)), age: E('adult', Object.keys(AGES)), sex: E('neutral', ['male', 'female', 'neutral']), build: E('average', Object.keys(BUILDS)),
         height: P(1.74, 0.5, 3), headUnits: P(7.5, 3.5, 9), legRatio: P(0.5, 0.36, 0.58), girth: P(1, 0.7, 1.7), shoulders: P(1, 0.7, 1.5),
-        skin: C(0xc68e6a), hair: E('short', HAIR_STYLES), hairColor: C(0x2e1d12), eyeColor: C(0x5a3418), beard: E('none', ['none', 'stubble', 'mustache', 'goatee', 'full']),
+        skin: C(0xc68e6a), hair: E('short', HAIR_STYLES), hairColor: C(0x2e1d12), eyeColor: C(0x5a3418), beard: E('none', ['none', 'stubble', 'mustache', 'goatee', 'full']), beardColor: C(undefined), freckles: { default: false },
         glasses: E('none', ['none', 'glasses', 'sunglasses']), ears: E('round', ['round', 'pointy']), earScale: P(1, 0.5, 3), noseScale: P(1, 0.5, 3), eyeScale: P(1, 0.5, 2), tusks: { default: false },
         outfit: E('casual', OUTFITS), top: C(0x2f4f7f), bottom: C(0x2b3a55), shoes: C(0x2a2420), accent: C(undefined), shorts: { default: false }, skirt: { default: false },
-        hat: E('none', HATS), hatColor: C(undefined), prop: E('none', PROPS), cape: C(undefined), pose: E('normal', ['normal', 'zombie', 'ride']), lod: E('high', ['high', 'low']), bust: P(1, 0.5, 1.6),
+        hat: E('none', HATS), hatColor: C(undefined), prop: E('none', PROPS), stethoscope: { default: false }, print: E('none', ['none', 'plaid', 'stripes', 'checks', 'dots']), cape: C(undefined), pose: E('normal', ['normal', 'zombie', 'ride']), lod: E('high', ['high', 'low']), bust: P(1, 0.5, 1.6),
         vary: { default: false }, varySex: { default: false }, varySkin: { default: false }, varyHair: { default: false }, varyClothes: { default: false },
       },
       aliases,
@@ -337,7 +337,7 @@ function characterModels() {
 function creatureModels() {
   const plans = {};
   for (const [name, sp] of Object.entries(SPECIES)) (plans[sp.plan] ||= []).push(name);
-  const extra = { quadruped: { kitten: 'cat', kitty: 'cat', bunny: 'rabbit', hare: 'rabbit', stag: 'deer', reindeer: 'deer', doe: 'deer', lamb: 'sheep', cattle: 'cow', calf: 'cow', ox: 'bull', foal: 'pony', mare: 'horse', stallion: 'horse', cub: 'bear', dino: 'dinosaur', brontosaurus: 'dinosaur', piglet: 'pig', hound: 'dog', wolves: 'wolf', mice: 'mouse', 'polar bears': 'polar bear' },
+  const extra = { quadruped: { ...Object.fromEntries(Object.entries(BREEDS).map(([b, d]) => [b, d.species])), ...Object.fromEntries(Object.entries(BREEDS).map(([b, d]) => [`${b}s`, d.species])), kitten: 'cat', kitty: 'cat', bunny: 'rabbit', hare: 'rabbit', stag: 'deer', reindeer: 'deer', doe: 'deer', lamb: 'sheep', cattle: 'cow', calf: 'cow', ox: 'bull', foal: 'pony', mare: 'horse', stallion: 'horse', cub: 'bear', dino: 'dinosaur', brontosaurus: 'dinosaur', piglet: 'pig', hound: 'dog', wolves: 'wolf', mice: 'mouse', 'polar bears': 'polar bear' },
     bird: { hen: 'chicken', rooster: 'chicken', chick: 'chicken', seagull: 'bird', gull: 'bird', pigeon: 'bird', dove: 'bird', hawk: 'eagle', falcon: 'eagle', raven: 'crow', geese: 'duck', goose: 'duck' },
     fish: { shark: 'shark', orca: 'whale' },
     serpent: { serpent: 'snake', viper: 'snake' },

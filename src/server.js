@@ -115,6 +115,7 @@ export function createServer(orchestrator = new Orchestrator()) {
       const lines = [
         `${r.ok ? '✔' : '✘'} ${r.subject.model}${r.others ? ` (+${r.others} other object(s) in the description ignored)` : ''}`,
         `sheet: ${r.sheet}`,
+        r.subject.fidelity ? `fidelity: ${r.subject.fidelity.understood}% of the description understood${r.subject.fidelity.ignored.length ? ` · not modelled: ${r.subject.fidelity.ignored.join(', ')}` : ''}${r.subject.fidelity.conflicts.length ? ` · ${r.subject.fidelity.conflicts.join('; ')}` : ''}` : '',
         formatQuality(r.quality),
         r.build.written ? `files: ${r.build.written} → index.html (preview), scene.js, model.js${r.exported ? `, model.glb (${(r.exported.bytes / 1024).toFixed(0)} KB, clips: ${r.exported.summary.animations.join(', ')})` : ''}` : '',
         `params: ${json(Object.fromEntries(Object.entries(r.subject.params).filter(([k]) => k !== 'bp' && k !== 'fur')))}`,

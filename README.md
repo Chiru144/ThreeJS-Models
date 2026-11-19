@@ -2,7 +2,7 @@
 
 An MCP server that turns a sentence (or a JSON spec) into a **validated, modern three.js scene with realistic, sculpted models**: a self-contained `index.html` you can open, plus a reusable `scene.js` module you can drop into any app (Vite, React, Next, plain JS).
 
-Inside, an **orchestrator** routes every request through **16 agents and 58 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine.
+Inside, an **orchestrator** routes every request through **16 agents and 59 sub-agents**, each owning one job. Each one has a self-test, so you can check the whole tree on your own machine.
 
 - **Character** and **creature** agents plan people, animals and fantasy creatures in detail.
 - The **architect** models *any* object from a blueprint, so nothing falls back to a placeholder.
@@ -21,7 +21,7 @@ git clone https://github.com/chiru144/threejs-models.git
 cd threejs-models
 npm install
 npm run doctor        # checks every agent + sub-agent in YOUR environment
-npm test              # full test suite (172 tests, several minutes: every archetype, species and blueprint is sculpted and scored)
+npm test              # full test suite (180 tests, several minutes: every archetype, species and blueprint is sculpted and scored)
 ```
 
 ### Connect it to your MCP client
@@ -75,8 +75,8 @@ Then just ask: *"Use threejs-forge to build a snowy village at night with glowin
 | Agent | Sub-agents | Job |
 |---|---|---|
 | **planner** | intent-parser · theme-expander · spec-normalizer | Reads counts, colours, materials, motion, lighting and quality words. Expands themes (forest, village, city, desert, space, cave, dining room…). Validates and clamps any spec |
-| **character** | archetype-resolver · anatomy-planner · appearance-planner · wardrobe-planner · pose-planner · relation-planner · rig-inspector | Plans each person like a character artist: 42 archetypes; real head-unit proportions by age, sex and build; skin, hair, eyes, facial hair, glasses; outfit, colours, hat, cape and prop; pose. Seats riders on mounts, puts pets beside their owner, then builds the rig in three.js to check feet are on the ground, the height is right and every pose works |
-| **creature** | species-classifier · morphology-planner · coat-planner · behavior-planner · rig-inspector | 56 species across 5 body plans (quadruped, bird, fish, serpent, arthropod). Sets proportions, ears, horns, tail, wings, trunk and mane; coat colours, spots and stripes; "baby", "winged" and "fat" modifiers; a gait that fits the body (horses gallop, penguins can't fly, sharks swim) |
+| **character** | archetype-resolver · anatomy-planner · appearance-planner · wardrobe-planner · pose-planner · relation-planner · description-fidelity · rig-inspector | Plans each person like a character artist: 42 archetypes; real head-unit proportions by age, sex and build; skin, hair, eyes, facial hair, glasses, freckles; outfit, colours, prints, hat, cape and prop; pose. Seats riders on mounts, puts pets beside their owner, then builds the rig in three.js to check feet are on the ground, the height is right and every pose works. The fidelity check lists any words in the description that nothing modelled and any trait an archetype overrode, so nothing is dropped silently |
+| **creature** | species-classifier · morphology-planner · coat-planner · behavior-planner · rig-inspector | 56 species across 5 body plans (quadruped, bird, fish, serpent, arthropod), plus 29 dog, cat and horse breeds (golden retriever, corgi, dalmatian, husky, siamese, maine coon…) with their colouring and build. Sets proportions, ears, horns, tail, wings, trunk and mane; coat colours, spots and stripes; "baby", "winged" and "fat" modifiers; a gait that fits the body (horses gallop, penguins can't fly, sharks swim) |
 | **architect** | blueprint-library · schema-validator · blueprint-compiler · design-reviewer | Models anything from a blueprint. Validates it and explains errors; expands mirrors and arrays; scales, grounds and picks a resolution per part; binds materials and paint. Reviews the *craft* (too few forms, no cuts or blends, one material, floating or too-thin parts). The built-in car, house, table, chair, lamp, vase, mushroom, crystal and rigged robot are blueprints |
 | **material** | color-resolver · preset-mapper · material-dedup | Colour names/hex → PBR presets (metal, chrome, gold, glass, ice, ceramic, car paint, neon, lava, toon…). Identical materials are shared |
 | **surfacing** | fur-groomer · detail-shader | Shell fur for 23 mammal species (length and density from body size; hero animals only, by quality). Procedural micro-detail with no textures or UVs: skin pores, fabric weave and knit, leather, scales, bark, stone and brick grain. It follows skinned meshes and fades with distance |
@@ -147,11 +147,17 @@ Models are also **optimised adaptively**: flat and gently curved regions are dec
 
 ![Realistic characters and creatures](docs/realistic.png)
 
+![Faces, hair, clothing and breeds from plain descriptions](docs/natural.png)
+
+*"a young woman with long red hair and freckles in a green sweater" · "a man with a brown beard wearing a red plaid shirt and jeans" · "an old man with a white beard and a cane" · "a girl with blonde braids in a yellow dress" · "a businessman in a navy suit with a red tie" · "a golden retriever" · "a dalmatian" · "an elephant" · "a tabby cat"*
+
 People, animals, trees and rocks are **sculpted**, not stacked from primitives:
 
 - **Sculpting engine:** each model is defined by anatomy (skull, cheekbones, brow ridge, eyelids, nostrils, lips, ears; ribcage, pecs, deltoids, biceps, calves, kneecaps; five-finger hands). These shapes are smoothly blended into one continuous mesh with signed-distance functions. The surface is extracted with surface nets, then projected onto the exact surface. It gets analytic normals and ambient occlusion baked into the creases.
 - **Real skinning:** every person and creature is a `SkinnedMesh` on a skeleton. People have 17 bones. Quadrupeds have legs with elbow/carpus/hock/fetlock joints, plus a jointed neck, tail, wings and trunk. Fish swim with a 4-bone spine wave, and snakes slither on a 10-bone chain. Joints bend smoothly, with weights computed from the anatomy.
-- **Clothing follows the body:** garments are the anatomy inflated and cut at hems, with fold detail, so they fit any body. Only exposed skin is sculpted, which saves triangles.
+- **Faces follow the artists' canon:** eye line at half the head height, nose base halfway from the eyes to the chin, mouth a third of the way down from there, mouth as wide as the irises are apart, ears from the brow to the nose base. Eyes sit in an almond opening framed by real eyelid meshes with a rolled margin, lash line and lashes. Brows are tapered arches laid on the skin. A dental arch rounds the mouth, so lips protrude in profile.
+- **Hair has a hairline:** a rounded forehead line, temples dipping to the sideburns, clear ears and a nape. Long hair falls as a curtain that breaks into uneven locks. Ponytails, buns, braids and pigtails are tied with a band. Beards grow from the jaw and stop at a cheek line, with the mouth left clear.
+- **Clothing follows the body:** garments are the anatomy inflated and cut at hems, with fold detail, so they fit any body. Jackets and lab coats hang straight from the chest like tailored cloth, with lapels and buttons; prints (plaid, stripes, checks, polka dots) are woven into the cloth shader. Only exposed skin is sculpted, which saves triangles.
 - **Materials:**
   - **Skin:** physical material with sheen and natural tint variation (lips, cheeks, nose).
   - **Eyes:** glossy, with a procedural iris and species-correct pupils (round, slit or horizontal bar).
@@ -180,11 +186,11 @@ forge_character  "a tall old woman with long grey hair, blue eyes and glasses in
 ```
 
 - **People**
-  - **What the agent reads:** age (baby → elder), sex, build (slim, athletic, heavy), height (tall, short), skin tone (a realistic range plus fantasy tones), hair (11 styles and named colours), eye colour, beard, mustache, stubble, glasses and pointed ears.
-  - **Clothes:** 15 outfits (suit, dress, hoodie, armor, robe, lab coat, spacesuit…), each garment can be coloured ("red shoes", "black suit"), plus hats, capes and props (sword and shield, staff, wand, torch, book, briefcase).
+  - **What the agent reads:** age (baby → elder), sex, build (slim, athletic, heavy), height (tall, short), skin tone (a realistic range plus fantasy tones), hair (13 styles, and a colour before any style word: "blonde ponytail", "red braids"), eye colour, beard (with its own colour), mustache, stubble, freckles, glasses and pointed ears. "Teenage boy", "shaved head" and "jeans" (denim unless a colour is given) mean what they say, and a single character only wears what was asked for.
+  - **Clothes:** 15 outfits (suit, dress, hoodie, armor, robe, lab coat, spacesuit…), each garment can be coloured ("red shoes", "black suit"), plus prints (plaid, striped, checked, polka-dot), tie colour, a stethoscope, hats, capes and props (sword and shield, staff, wand, torch, book, briefcase, cane).
   - **Pose:** idle, walk, run, wave or dance.
   - **Archetypes:** knight, wizard, witch, king, queen, princess, soldier, police, firefighter, doctor, nurse, chef, scientist, astronaut, pirate, ninja, cowboy, farmer, athlete, elf, goblin, orc, zombie, vampire and more.
-- **Animals and creatures:** dog, cat, wolf, fox, horse, zebra, cow, pig, sheep, goat, deer, bear, lion, tiger, elephant, giraffe, rabbit, mouse, unicorn, pegasus, dragon and dinosaur. Birds (eagle, owl, parrot, penguin, duck, chicken, flamingo…), fish (goldfish, clownfish, koi, shark, whale, dolphin), snakes (snake, python, cobra, eel, worm), spiders, ants, beetles, scorpions and crabs. Modifiers: colours ("black and white"), spotted, striped, baby, winged, horned, fat or skinny, long-necked, and materials (golden, glass, stone).
+- **Animals and creatures:** dog, cat, wolf, fox, horse, zebra, cow, pig, sheep, goat, deer, bear, lion, tiger, elephant, giraffe, rabbit, mouse, unicorn, pegasus, dragon and dinosaur. Birds (eagle, owl, parrot, penguin, duck, chicken, flamingo…), fish (goldfish, clownfish, koi, shark, whale, dolphin), snakes (snake, python, cobra, eel, worm), spiders, ants, beetles, scorpions and crabs. Modifiers: colours ("black and white"), spotted, striped, baby, winged, horned, fat or skinny, long-necked, and materials (glass, stone; "golden" is a coat colour on a living animal and gold metal only on a statue).
 - **Relationships:** "a knight **riding** a horse" seats the rider in a saddle, and the rider moves with the mount. "a girl **walking her** dog" keeps the dog beside her as she walks.
 - **Crowds:** "20 people" each get their own look (sex, skin, hair, clothes). Large crowds are instanced from a few looks with a lighter mesh.
 - **Themes:** farm, savanna/safari, jungle, underwater/reef/aquarium, medieval, castle, park, street, crowd, zoo and graveyard.
@@ -244,7 +250,7 @@ renderer.setAnimationLoop((t) => { timer.update(t); app.update(timer.getElapsed(
 ## Checking your environment
 
 ```bash
-npm run doctor              # env + deps, all 16 agents / 58 sub-agents, 7 full builds, a custom blueprint + GLB, file writes, MCP stdio round-trip
+npm run doctor              # env + deps, all 16 agents / 59 sub-agents, 7 full builds, a custom blueprint + GLB, file writes, MCP stdio round-trip
 npm run doctor -- --browser # also renders a scene in headless Chromium (needs playwright)
 npm run doctor -- --json    # machine-readable, for CI
 npm test                    # node:test: every sub-agent, pipeline, all models, every archetype and species, rigs, reviewer, real MCP client

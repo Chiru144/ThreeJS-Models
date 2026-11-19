@@ -1,7 +1,7 @@
 // Creature agent: plans animals and fantasy creatures — species & body plan,
 // morphology, coat/colouring, behaviour/gait — then inspects the rigged result.
 import { Agent, SubAgent, assert } from '../core/agent.js';
-import { SPECIES } from '../library/creatures.js';
+import { SPECIES, BREEDS } from '../library/creatures.js';
 import { MODELS, sanitizeParams } from '../library/models.js';
 import { COLORS, resolveColor, MATERIAL_WORDS } from '../library/materials.js';
 import { buildModel, measure } from '../core/sandbox.js';
@@ -33,12 +33,20 @@ function classify({ model, params = {}, description = '' }) {
   return { species, plan: SPECIES[species].plan };
 }
 
+/** The breed named in the text, if it belongs to this species ("golden retriever", "corgi", "siamese"). */
+const breedOf = (species, text) => { const t = ` ${String(text).toLowerCase()} `; const b = Object.keys(BREEDS).sort((x, y) => y.length - x.length).find((n) => BREEDS[n].species === species && new RegExp(`\\b${n}s?\\b`).test(t)); return b ? { name: b, ...BREEDS[b] } : null; };
+
 function planMorphology({ species, text, explicit }) {
   const base = { ...SPECIES[species] };
   delete base.plan;
   const m = { species, ...base };
   const t = ` ${text} `;
   let scale = 1;
+  const breed = breedOf(species, text);
+  if (breed) {
+    for (const [k, v] of Object.entries(breed.m || {})) if (k === 'size') scale *= v; else if (typeof m[k] === 'number') m[k] *= v;
+    Object.assign(m, breed.set || {});
+  }
   if (/\b(baby|young|cub|foal|calf|kitten|puppy|piglet|lamb|chick|hatchling|juvenile)\b/.test(t) && species !== 'puppy') {
     scale = 0.5;
     if (m.headLen) { m.headLen *= 1.3; m.headH *= 1.3; }
@@ -57,8 +65,10 @@ function planMorphology({ species, text, explicit }) {
 
 function planCoat({ species, text, explicit }) {
   const sp = SPECIES[species];
-  const t = ` ${text} `;
-  const out = {};
+  let t = ` ${text} `;
+  const breed = breedOf(species, text);
+  const out = { ...(breed?.c || {}) }; // the breed's colouring, unless the text says otherwise
+  if (breed) t = t.replace(new RegExp(`\\b${breed.name}`), species); // "golden" in "golden retriever" is the breed, not a colour request
   const main = sp.plan === 'bird' || sp.plan === 'fish' || sp.plan === 'serpent' || sp.plan === 'arthropod' ? 'body' : 'coat';
   const second = sp.plan === 'quadruped' ? 'accent' : sp.plan === 'bird' ? 'wing' : sp.plan === 'fish' ? 'fin' : 'accent';
   const two = t.match(new RegExp(`\\b${COLOR_RE}\\s+and\\s+${COLOR_RE}\\b`));
@@ -73,7 +83,8 @@ function planCoat({ species, text, explicit }) {
   if (eyes) out.eye = col(eyes[1]);
   // a "body" colour on a quadruped with no distinct belly keeps its belly in step
   if (out.coat !== undefined && sp.belly && !two) out.belly = new Color3Mix(out.coat).lighter;
-  const preset = Object.entries({ golden: 'gold', gold: 'gold', glass: 'glass', crystal: 'glass', metal: 'metal', metallic: 'metal', chrome: 'chrome', stone: 'stone', marble: 'stone', neon: 'neon', glowing: 'neon', ice: 'ice', icy: 'ice', lava: 'lava' })
+  const statue = /\b(statue|figurine|sculpture|idol|trophy|made of|solid|metallic)\b/.test(t); // "golden" on a living animal is a colour
+  const preset = Object.entries({ ...(statue ? { golden: 'gold', gold: 'gold' } : {}), glass: 'glass', crystal: 'glass', metal: 'metal', metallic: 'metal', chrome: 'chrome', stone: 'stone', marble: 'stone', neon: 'neon', glowing: 'neon', ice: 'ice', icy: 'ice', lava: 'lava' })
     .find(([w]) => new RegExp(`\\b${w}\\b`).test(t) && !new RegExp(`\\b${w}[ -](eyes|eyed)\\b`).test(t));
   return { coat: { ...out, ...explicit }, preset: preset && MATERIAL_WORDS.has(preset[0]) ? preset[1] : preset?.[1] };
 }
@@ -140,6 +151,9 @@ export class CreatureAgent extends Agent {
           description: 'Coat / plumage / scale colours, spots, stripes, eye colour, material (golden, glass, stone…).',
           run: (input) => planCoat(input),
           test: () => {
+            const g = planCoat({ species: 'dog', text: 'a golden retriever', explicit: {} });
+            assert(g.coat.coat === BREEDS['golden retriever'].c.coat && g.preset === undefined, 'breed colours, golden is not metal');
+            assert(planCoat({ species: 'dog', text: 'a black labrador', explicit: {} }).coat.coat !== BREEDS.labrador.c.coat, 'stated colour beats the breed');
             const r = planCoat({ species: 'dog', text: 'a black and white dog with blue eyes', explicit: {} });
             assert(r.coat.coat === COLORS.black && r.coat.accent === COLORS.white && r.coat.eye === COLORS.blue, JSON.stringify(r));
             assert(planCoat({ species: 'cat', text: 'a golden cat statue', explicit: {} }).preset === 'gold', 'preset');

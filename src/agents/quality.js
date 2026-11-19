@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { Agent, SubAgent, assert } from '../core/agent.js';
 import { buildModel } from '../core/sandbox.js';
 
-const meshesOf = (obj) => { const out = []; obj.traverse((o) => { if (o.isMesh && !o.userData.shell && o.geometry?.index) out.push(o); }); return out; };
+// fur shells and cards (eyelids, lashes, brows: deliberately open sheets) are not solid surfaces
+const meshesOf = (obj) => { const out = []; obj.traverse((o) => { if (o.isMesh && !o.userData.shell && !o.userData.card && o.geometry?.index) out.push(o); }); return out; };
 
 function inspectMesh(obj) {
   let tris = 0, verts = 0, degenerate = 0, boundary = 0, nonManifold = 0, flipped = 0, edges = 0;

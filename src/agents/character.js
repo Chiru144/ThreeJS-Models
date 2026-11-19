@@ -9,23 +9,26 @@ import { buildModel, measure } from '../core/sandbox.js';
 const hash = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 const pickBy = (seed, arr) => arr[seed % arr.length];
 const has = (text, re) => re.test(text);
-const COLOR_WORDS = Object.keys(COLORS).concat(['golden', 'blond', 'blonde', 'ginger', 'auburn', 'platinum', 'dark', 'light']);
-const colorOf = (w) => resolveColor(w === 'golden' ? 'gold' : w) ?? HAIR_COLORS[w];
+const COLOR_WORDS = Object.keys(COLORS).concat(['golden', 'blond', 'blonde', 'ginger', 'auburn', 'platinum', 'dark', 'light', 'denim', 'leather', 'khaki', 'camo', 'tweed', 'corduroy', 'velvet', 'silk', 'wool']);
+const MATERIAL_COLORS = { denim: 0x3b5578, leather: 0x2a1d17, khaki: 0xb5a27a, camo: 0x5b6640, tweed: 0x6b5a45, corduroy: 0x7a5232, velvet: 0x5a1a3a, silk: 0xe8dcc8, wool: 0x8a8070 };
+const colorOf = (w) => MATERIAL_COLORS[w] ?? resolveColor(w === 'golden' ? 'gold' : w) ?? HAIR_COLORS[w];
 
 /** Free text -> raw traits (only what the user actually said). */
 function readTraits(text) {
   let t = ` ${String(text || '').toLowerCase().replace(/[^a-z0-9#\s-]/g, ' ')} `;
   const tr = {};
-  // hair first, so "short red hair" does not become "short person in red"
-  const hairRe = new RegExp(`\\b((?:long|short|curly|wavy|straight|spiky|messy|braided|shoulder-length)\\s+)?((?:${Object.keys(HAIR_COLORS).sort((a, b) => b.length - a.length).join('|')})\\s+)?((?:long|short|curly|wavy|spiky)\\s+)?(hair|haired)\\b`);
+  // hair first, so "short red hair" does not become "short person in red"; the colour may sit before any
+  // hairstyle word ("blonde ponytail", "grey bun", "red braids")
+  const HAIR_NOUN = 'hair|haired|ponytail|pony tail|bun|braids|braid|braided hair|pigtails|curls|afro|bob|mohawk|dreadlocks|locks';
+  const hairRe = new RegExp(`\\b((?:long|short|curly|wavy|straight|spiky|messy|braided|shoulder-length|cropped)\\s+)?((?:${Object.keys(HAIR_COLORS).sort((a, b) => b.length - a.length).join('|')})\\s+)?((?:long|short|curly|wavy|spiky|straight)\\s+)?(${HAIR_NOUN})\\b`);
   const hm = t.match(hairRe);
   if (hm) {
     const style = (hm[1] || hm[3] || '').trim();
     if (hm[2]) tr.hairColor = HAIR_COLORS[hm[2].trim()];
-    if (style) tr.hair = { long: 'long', 'shoulder-length': 'bob', short: 'short', curly: 'curly', wavy: 'long', straight: 'long', spiky: 'spiky', messy: 'spiky', braided: 'ponytail' }[style];
-    t = t.replace(hm[0], ' ');
+    if (style) tr.hair = { long: 'long', 'shoulder-length': 'bob', short: 'short', cropped: 'short', curly: 'curly', wavy: 'long', straight: 'long', spiky: 'spiky', messy: 'spiky', braided: 'braid' }[style];
+    if (hm[4] !== 'hair' && hm[4] !== 'haired') t = t.replace(hm[2] || '', ' '); else t = t.replace(hm[0], ' '); // keep the style noun for the style table
   }
-  const styles = { bald: 'bald', ponytail: 'ponytail', pigtails: 'ponytail', braid: 'ponytail', braids: 'ponytail', bun: 'bun', afro: 'afro', mohawk: 'mohawk', 'buzz cut': 'buzz', buzzcut: 'buzz', bob: 'bob', dreadlocks: 'long' };
+  const styles = { bald: 'bald', ponytail: 'ponytail', 'pony tail': 'ponytail', pigtails: 'pigtails', braid: 'braid', braids: 'braid', bun: 'bun', afro: 'afro', mohawk: 'mohawk', 'buzz cut': 'buzz', buzzcut: 'buzz', 'crew cut': 'buzz', bob: 'bob', dreadlocks: 'long', curls: 'curly' };
   for (const [w, st] of Object.entries(styles)) if (has(t, new RegExp(`\\b${w}\\b`))) tr.hair = st;
   const eye = t.match(new RegExp(`\\b(${Object.keys(EYE_COLORS).join('|')})[ -](eyes|eyed)\\b`));
   if (eye) { tr.eyeColor = EYE_COLORS[eye[1]]; t = t.replace(eye[0], ' '); }
@@ -33,8 +36,9 @@ function readTraits(text) {
   if (skin) { tr.skin = SKIN_TONES[{ tanned: 'tan', black: 'deep', white: 'fair' }[skin[1]] || skin[1]]; t = t.replace(skin[0], ' '); }
 
   if (has(t, /\b(baby|toddler|infant)\b/)) tr.age = 'toddler';
+  else if (has(t, /\b(teen|teens|teenager|teenagers|teenage|adolescent)\b/)) tr.age = 'teen'; // "teenage boy" is a teen, not a child
   else if (has(t, /\b(child|kid|kids|children|little (boy|girl)|boy|girl|young (boy|girl))\b/)) tr.age = 'child';
-  else if (has(t, /\b(teen|teens|teenager|teenage|adolescent|young)\b/)) tr.age = 'teen';
+  else if (has(t, /\byoung (person|people)\b/)) tr.age = 'teen';
   else if (has(t, /\b(old|elderly|aged|senior|grandma|grandpa|grandmother|grandfather|ancient)\b/)) tr.age = 'elder';
   if (has(t, /\b(woman|women|female|lady|girl|girls|she|her|queen|princess|mother|mom|grandma|grandmother|witch|sorceress|businesswoman|nurse|actress)\b/)) tr.sex = 'female';
   else if (has(t, /\b(man|men|male|guy|boy|boys|he|his|king|prince|father|dad|grandpa|grandfather|gentleman|businessman|bearded)\b/)) tr.sex = 'male';
@@ -43,6 +47,10 @@ function readTraits(text) {
   if (has(t, /\b(fat|heavy|chubby|stocky|overweight|plump|round|portly)\b/)) tr.build = 'heavy';
   if (has(t, /\b(tall|towering)\b/)) tr.heightK = 1.09;
   if (has(t, /\b(short)\b/)) tr.heightK = 0.91;
+  if (has(t, /\b(shaved|shaven|bald|clean-shaven) head\b|\bskinhead\b/)) tr.hair = 'bald';
+  const bc = t.match(new RegExp(`\\b(${Object.keys(HAIR_COLORS).sort((a, b) => b.length - a.length).join('|')})\\s+(beard|mustache|moustache|goatee|stubble)\\b`));
+  if (bc) tr.beardColor = HAIR_COLORS[bc[1]];
+  if (has(t, /\bfreckle(s|d)\b/)) tr.freckles = true;
   if (has(t, /\bbeard(ed)?\b/)) tr.beard = has(t, /\b(short|trimmed) beard\b/) ? 'goatee' : 'full';
   if (has(t, /\b(mustache|moustache)\b/)) tr.beard = 'mustache';
   if (has(t, /\bgoatee\b/)) tr.beard = 'goatee';
@@ -56,7 +64,7 @@ function readTraits(text) {
 
 const GARMENTS = [
   // [regex word, outfit or null, which colour slot]
-  ['t-?shirts?|tees?', 'tshirt', 'top'], ['shirts?|blouses?|tops?', null, 'top'], ['tank tops?', 'sport', 'top'], ['jackets?|coats?|blazers?', null, 'top'],
+  ['t-?shirts?|tees?', 'tshirt', 'top'], ['shirts?|blouses?|tops?(?! hats?)', null, 'top'], ['tank tops?', 'sport', 'top'], ['jackets?|coats?|blazers?', null, 'top'],
   ['sweaters?|jumpers?|cardigans?', 'sweater', 'top'], ['hoodies?|hooded sweatshirt', 'hoodie', 'top'], ['vests?', null, 'top'],
   ['suits?|tuxedos?|tux', 'suit', 'top'], ['gowns?', 'robe', 'top'], ['dress(es)?|sundress', 'dress', 'top'], ['robes?', 'robe', 'top'],
   ['armou?r|plate armou?r|chainmail', 'armor', 'accent'], ['uniforms?', 'uniform', 'top'], ['lab coats?', 'labcoat', 'top'], ['space ?suits?', 'spacesuit', 'top'],
@@ -65,19 +73,26 @@ const GARMENTS = [
   ['shoes|boots|sneakers|trainers|heels|sandals', null, 'shoes'],
 ];
 const HAT_WORDS = [['top hats?', 'tophat'], ['wizard hats?|pointy hats?|witch hats?', 'wizard'], ['cowboy hats?|stetsons?', 'cowboy'], ['hard ?hats?', 'hardhat'], ['chef hats?|toques?', 'chef'], ['pirate hats?|tricorns?', 'pirate'], ['crowns?|tiaras?', 'crown'], ['helmets?', 'helmet'], ['beanies?|wool hats?', 'beanie'], ['baseball caps?|caps?', 'cap'], ['hoods?|hooded', 'hood'], ['hats?', 'cap']];
-const PROP_WORDS = [['sword and shield', 'swordshield'], ['swords?|blades?|katana', 'sword'], ['staffs?|staves', 'staff'], ['wands?', 'wand'], ['shields?', 'shield'], ['torch(es)?', 'torch'], ['books?', 'book'], ['briefcases?', 'briefcase']];
+const PROP_WORDS = [['canes?|walking sticks?', 'cane'], ['sword and shield', 'swordshield'], ['swords?|blades?|katana', 'sword'], ['staffs?|staves', 'staff'], ['wands?', 'wand'], ['shields?', 'shield'], ['torch(es)?', 'torch'], ['books?', 'book'], ['briefcases?', 'briefcase']];
 
 function readWardrobe(rest) {
   const w = {};
+  const pr = rest.match(/\b(plaid|tartan|flannel|striped|stripes|stripy|pinstriped?|checkered|chequered|checked|gingham|polka[ -]dots?|polka[ -]dotted|spotted)\b/);
+  if (pr) w.print = /plaid|tartan|flannel/.test(pr[1]) ? 'plaid' : /stripe|stripy/.test(pr[1]) ? 'stripes' : /check|chequer|gingham/.test(pr[1]) ? 'checks' : 'dots';
   const colorRe = `(?:(${COLOR_WORDS.join('|')})\\s+)?`;
   for (const [re, outfit, slot] of GARMENTS) {
     const m = rest.match(new RegExp(`\\b${colorRe}(?:[a-z]+\\s+)?(${re})\\b`));
     if (!m) continue;
+    rest = rest.replace(m[0], ' , '); // consumed: "green hoodie jeans" must not give the jeans the hoodie's colour
     if (outfit && !(w.outfit && outfit === 'tshirt')) w.outfit = outfit;
     if (/^shorts$/.test(m[2])) w.shorts = true;
     if (/^skirts?$/.test(m[2])) w.skirt = true;
     if (m[1]) w[slot] = colorOf(m[1]);
+    else if (/^jeans$/.test(m[2]) && w.bottom === undefined) w.bottom = MATERIAL_COLORS.denim; // jeans are denim unless a colour is given
   }
+  const tie = rest.match(new RegExp(`\\b${colorRe}(?:neck)?ties?\\b`));
+  if (tie && tie[1]) w.accent = colorOf(tie[1]);
+  if (/\bstethoscopes?\b/.test(rest)) w.stethoscope = true;
   for (const [re, hat] of HAT_WORDS) {
     const m = rest.match(new RegExp(`\\b${colorRe}(${re})\\b`));
     if (m) { w.hat = hat; if (m[1]) w.hatColor = colorOf(m[1]); break; }
@@ -89,6 +104,34 @@ function readWardrobe(rest) {
   if (dressedIn && w.top === undefined) w.top = colorOf(dressedIn[1]);
   if (w.outfit === 'armor' && /\b(golden|gold) armou?r\b/.test(rest)) w.accent = 0xffc356;
   return w;
+}
+
+// ---- description fidelity: what in the request was understood, what was not, and what got overridden ----
+const STOP = new Set('a an the with and or in of on at to for by from as is are was be being his her their its my your our this that these those who which while very quite rather some any each one two three pair set wearing wears worn holding holds carrying carries dressed clad having has have looking looks standing stands person people character figure style styled realistic detailed high quality model render make create please wearing also just like plus'.split(' '));
+const ANIM_WORDS = 'idle walk walks walking run runs running jog jogging wave waves waving dance dances dancing ride rides riding fly flying swim swimming bounce bouncing zombie shambling'.split(' ');
+let KNOWN = null;
+function knownWords() {
+  if (KNOWN) return KNOWN;
+  const src = [readTraits, readWardrobe, planAppearance, planWardrobe].map((f) => f.toString()).join(' ') + JSON.stringify([GARMENTS, HAT_WORDS, PROP_WORDS]);
+  KNOWN = new Set([...src.toLowerCase().match(/[a-z]{3,}/g), ...COLOR_WORDS, ...Object.keys(HAIR_COLORS).flatMap((k) => k.split(' ')), ...Object.keys(EYE_COLORS).flatMap((k) => k.split(' ')),
+    ...Object.keys(SKIN_TONES), ...Object.keys(ARCHETYPES), ...Object.keys(ARCHETYPES).map((a) => `${a}s`), ...ANIM_WORDS, 'hair', 'eyes', 'skin', 'head', 'ears', 'face', 'clothes', 'outfit', 'hat', 'mustache', 'moustache']);
+  return KNOWN;
+}
+function checkFidelity({ description, traits, wardrobe, params }) {
+  const words = String(description || '').toLowerCase().match(/[a-z][a-z-]*[a-z]/g) || [];
+  const content = words.filter((w) => w.length > 2 && !STOP.has(w));
+  const known = knownWords();
+  const isKnown = (w) => [w, w.replace(/(es|s)$/, ''), `${w}s`, `${w}es`, w.replace(/-/g, '')].some((q) => known.has(q));
+  const ignored = [...new Set(content.filter((w) => !isKnown(w)))];
+  const conflicts = [];
+  const same = (a, b) => a === undefined || b === undefined || a === b;
+  if (!same(traits.hair, params.hair)) conflicts.push(`hair "${traits.hair}" became "${params.hair}"`);
+  if (!same(traits.hairColor, params.hairColor) && params.beardColor === undefined) conflicts.push('hair colour was overridden');
+  if (!same(traits.age, params.age)) conflicts.push(`age "${traits.age}" became "${params.age}"`);
+  if (!same(traits.sex, params.sex)) conflicts.push(`sex "${traits.sex}" became "${params.sex}"`);
+  for (const k of ['top', 'bottom', 'shoes', 'hat', 'prop', 'outfit']) if (!same(wardrobe[k], params[k])) conflicts.push(`${k} was overridden`);
+  const understood = content.length ? (content.length - ignored.length) / content.length : 1;
+  return { understood: Math.round(understood * 100), ignored, conflicts };
 }
 
 /** Archetype defaults < user traits. */
@@ -137,7 +180,10 @@ function planAppearance({ base, traits, explicit, anatomy, seed, crowd }) {
   out.hair = pick('hair', anatomy.age === 'elder' && anatomy.sex === 'male' && seed % 3 === 0 ? 'bald' : defaultHair);
   out.eyeColor = pick('eyeColor', Object.values(EYE_COLORS)[(seed >>> 9) % 6]);
   out.beard = pick('beard', 'none');
-  out.glasses = pick('glasses', anatomy.age === 'elder' && seed % 2 ? 'glasses' : 'none');
+  out.glasses = pick('glasses', crowd && anatomy.age === 'elder' && seed % 2 ? 'glasses' : 'none'); // a single character only wears what was asked for
+  const beardC = explicit.beardColor ?? traits.beardColor;
+  if (beardC !== undefined) { if (explicit.hairColor === undefined && traits.hairColor === undefined) out.hairColor = beardC; else if (beardC !== out.hairColor) out.beardColor = beardC; }
+  if (explicit.freckles ?? traits.freckles) out.freckles = true;
   for (const k of ['ears', 'earScale', 'noseScale', 'tusks', 'eyeScale']) if (pick(k) !== undefined) out[k] = pick(k);
   if (crowd) {
     out.vary = true;
@@ -157,7 +203,7 @@ function planWardrobe({ base, wardrobe, explicit, seed, crowd, anatomy }) {
     bottom: pick('bottom', [0x2b3a55, 0x3b3b3b, 0x5a4632, 0x1d1d22][(seed >>> 6) % 4]),
     shoes: pick('shoes', 0x2a2420),
   };
-  for (const k of ['hat', 'hatColor', 'prop', 'cape', 'accent', 'shorts', 'skirt']) if (pick(k) !== undefined) out[k] = pick(k);
+  for (const k of ['hat', 'hatColor', 'prop', 'cape', 'accent', 'shorts', 'skirt', 'stethoscope', 'print']) if (pick(k) !== undefined) out[k] = pick(k);
   if (crowd) out.varyClothes = explicit.varyClothes ?? (wardrobe.top === undefined && explicit.top === undefined && base.top === undefined);
   return out;
 }
@@ -250,6 +296,9 @@ export class CharacterAgent extends Agent {
           run: (input) => planAppearance(input),
           test: () => {
             const { traits } = readTraits('a tall woman with long red hair, green eyes and glasses');
+            assert(readWardrobe(' a chubby boy in a green hoodie jeans ').bottom === 0x3b5578, 'colour bleeding between garments');
+            assert(readWardrobe(' a man wearing a red plaid shirt ').print === 'plaid', 'print');
+            assert(readTraits('a girl with a blonde ponytail').traits.hairColor === HAIR_COLORS.blonde && readTraits('a girl with a blonde ponytail').traits.hair === 'ponytail' && readTraits('red braids').traits.hair === 'braid', 'hair noun colours');
             assert(readTraits('long dark hair').traits.hair === 'long' && readTraits('a man with dark brown hair').traits.hairColor === HAIR_COLORS['dark brown'], 'dark hair');
             assert(traits.hair === 'long' && traits.hairColor === HAIR_COLORS.red && traits.eyeColor === EYE_COLORS.green && traits.glasses === 'glasses' && traits.sex === 'female' && traits.heightK > 1, JSON.stringify(traits));
             const ap = planAppearance({ base: {}, traits, explicit: {}, anatomy: { age: 'adult', sex: 'female' }, seed: 3 });
@@ -263,6 +312,19 @@ export class CharacterAgent extends Agent {
           test: () => {
             const w = readWardrobe(readTraits('a man in a black suit and red shoes wearing a top hat holding a sword').rest);
             assert(w.outfit === 'suit' && w.top === COLORS.black && w.shoes === COLORS.red && w.hat === 'tophat' && w.prop === 'sword', JSON.stringify(w));
+          },
+        }),
+        new SubAgent({
+          name: 'description-fidelity',
+          description: 'Checks the plan against the request: lists words nothing understood and traits an archetype overrode, so nothing is dropped silently.',
+          run: (input) => checkFidelity(input),
+          test: () => {
+            const d = 'a woman with long red hair, a tattoo and a scarf';
+            const { traits, rest } = readTraits(d);
+            const f = checkFidelity({ description: d, traits, wardrobe: readWardrobe(rest), params: { hair: 'long', hairColor: traits.hairColor } });
+            assert(f.ignored.includes('tattoo') && f.ignored.includes('scarf') && !f.ignored.includes('woman') && !f.ignored.includes('red'), JSON.stringify(f));
+            assert(checkFidelity({ description: 'a man in a shirt, jacket and coat', traits: {}, wardrobe: {}, params: {} }).ignored.length === 0, 'singular garments');
+            assert(checkFidelity({ description: 'a man', traits: { hair: 'long' }, wardrobe: {}, params: { hair: 'short' } }).conflicts.length === 1, 'override not reported');
           },
         }),
         new SubAgent({
@@ -319,6 +381,12 @@ export class CharacterAgent extends Agent {
     const r = await this.delegate('rig-inspector', { params: o.params, style: o.style }, ctx);
     if (Math.abs(r.minY) > 0.08) ctx.warn(`${o.id}: feet ${r.minY} m off the ground`);
     o.sheet = sheet(o.params, o.animation);
+    if (o.description) {
+      const f = await this.delegate('description-fidelity', { description: o.description, traits, wardrobe, params: o.params }, ctx);
+      o.fidelity = f;
+      if (f.ignored.length) ctx.warn(`${o.id}: not modelled from the description: ${f.ignored.slice(0, 8).join(', ')}`);
+      for (const c of f.conflicts.slice(0, 3)) ctx.warn(`${o.id}: ${c}`);
+    }
     return o;
   }
 

@@ -17,7 +17,7 @@ export const SPECIES = {
   pegasus: { plan: 'quadruped', bodyLen: 1.5, bodyH: 0.68, bodyW: 0.48, legLen: 0.95, neckLen: 0.75, neckAngle: 0.9, headLen: 0.52, headH: 0.23, snout: 0.22, headPitch: 0.45, ears: 'pointy', earSize: 0.12, tail: 'long', tailLen: 0.8, tailUp: -0.5, mane: true, hooves: true, wings: 'feather', wingSpan: 1.6, coat: 0xf6f6f6, accent: 0xd8d8e8 },
   cow: { plan: 'quadruped', bodyLen: 1.6, bodyH: 0.8, bodyW: 0.62, legLen: 0.72, neckLen: 0.35, neckAngle: 0.3, headLen: 0.5, headH: 0.3, snout: 0.15, headPitch: 0.3, ears: 'side', earSize: 0.14, horns: 'short', tail: 'tuft', tailLen: 0.7, tailUp: -1.1, hooves: true, spots: 7, coat: 0xf2f0ea, accent: 0x1c1c1c, nose: 0xe8a0a0 },
   bull: { plan: 'quadruped', bodyLen: 1.8, bodyH: 0.95, bodyW: 0.75, legLen: 0.7, neckLen: 0.3, neckAngle: 0.2, headLen: 0.55, headH: 0.35, snout: 0.15, headPitch: 0.2, ears: 'side', earSize: 0.14, horns: 'curved', tail: 'tuft', tailLen: 0.7, tailUp: -1.1, hooves: true, coat: 0x2a1c14, accent: 0x111111 },
-  pig: { plan: 'quadruped', bodyLen: 0.95, bodyH: 0.5, bodyW: 0.45, legLen: 0.24, neckLen: 0.08, neckAngle: 0.1, headLen: 0.3, headH: 0.26, snout: 0.1, snoutFlat: true, ears: 'floppy', earSize: 0.11, tail: 'curl', tailLen: 0.1, tailUp: 0.5, hooves: true, coat: 0xf2a7a0, nose: 0xe88c88 },
+  pig: { plan: 'quadruped', hide: true, bodyLen: 0.95, bodyH: 0.5, bodyW: 0.45, legLen: 0.24, neckLen: 0.08, neckAngle: 0.1, headLen: 0.3, headH: 0.26, snout: 0.1, snoutFlat: true, ears: 'floppy', earSize: 0.11, tail: 'curl', tailLen: 0.1, tailUp: 0.5, hooves: true, coat: 0xf2a7a0, nose: 0xe88c88 },
   sheep: { plan: 'quadruped', bodyLen: 1.0, bodyH: 0.6, bodyW: 0.55, legLen: 0.42, neckLen: 0.2, neckAngle: 0.6, headLen: 0.28, headH: 0.18, snout: 0.1, ears: 'side', earSize: 0.09, tail: 'puff', tailLen: 0.1, woolly: true, hooves: true, coat: 0xf0ece0, accent: 0x2a2420, headColor: 0x2a2420 },
   goat: { plan: 'quadruped', bodyLen: 0.9, bodyH: 0.42, bodyW: 0.32, legLen: 0.5, neckLen: 0.3, neckAngle: 0.8, headLen: 0.3, headH: 0.16, snout: 0.12, headPitch: 0.3, ears: 'side', earSize: 0.09, horns: 'curved', tail: 'thin', tailLen: 0.12, tailUp: 1.1, hooves: true, coat: 0xe8e0d0, accent: 0x7a6a5a },
   deer: { plan: 'quadruped', bodyLen: 1.2, bodyH: 0.48, bodyW: 0.36, legLen: 0.85, neckLen: 0.5, neckAngle: 1.05, headLen: 0.36, headH: 0.16, snout: 0.15, headPitch: 0.4, ears: 'pointy', earSize: 0.13, horns: 'antlers', hornColor: 0xd8c8a8, tail: 'puff', tailLen: 0.1, hooves: true, coat: 0xa0683a, belly: 0xe8d8c0 },
@@ -25,7 +25,7 @@ export const SPECIES = {
   'polar bear': { plan: 'quadruped', bodyLen: 1.7, bodyH: 0.85, bodyW: 0.78, legLen: 0.55, legR: 0.14, neckLen: 0.35, neckAngle: 0.35, headLen: 0.42, headH: 0.3, snout: 0.16, ears: 'round', earSize: 0.07, tail: 'puff', tailLen: 0.08, coat: 0xf2efe6, nose: 0x1a1a1a },
   lion: { plan: 'quadruped', bodyLen: 1.6, bodyH: 0.6, bodyW: 0.48, legLen: 0.6, legR: 0.09, neckLen: 0.25, neckAngle: 0.6, headLen: 0.42, headH: 0.32, snout: 0.12, ears: 'round', earSize: 0.07, tail: 'tuft', tailLen: 0.8, tailUp: -0.4, lionMane: true, coat: 0xc9a063, accent: 0x7a4a22, eye: 0xc28a1c },
   tiger: { plan: 'quadruped', bodyLen: 1.7, bodyH: 0.6, bodyW: 0.48, legLen: 0.55, legR: 0.09, neckLen: 0.25, neckAngle: 0.6, headLen: 0.4, headH: 0.3, snout: 0.11, ears: 'round', earSize: 0.07, tail: 'thin', tailLen: 0.9, tailUp: -0.2, stripes: 11, coat: 0xe07a24, belly: 0xf5ecdc, accent: 0x161616, eye: 0xc28a1c },
-  elephant: { plan: 'quadruped', bodyLen: 2.6, bodyH: 1.7, bodyW: 1.45, legLen: 1.25, legR: 0.24, neckLen: 0.1, neckAngle: 0.4, headLen: 0.8, headH: 0.85, snout: 0, trunk: true, tusks: true, ears: 'big', earSize: 0.65, tail: 'tuft', tailLen: 0.9, tailUp: -1.3, coat: 0x8a8a86, accent: 0x3a3a38 },
+  elephant: { plan: 'quadruped', hide: true, bodyLen: 2.6, bodyH: 1.7, bodyW: 1.45, legLen: 1.25, legR: 0.24, neckLen: 0.1, neckAngle: 0.4, headLen: 0.8, headH: 0.85, snout: 0, trunk: true, tusks: true, ears: 'big', earSize: 0.65, tail: 'tuft', tailLen: 0.9, tailUp: -1.3, coat: 0x8a8a86, accent: 0x3a3a38 },
   giraffe: { plan: 'quadruped', bodyLen: 1.7, bodyH: 0.85, bodyW: 0.6, legLen: 1.6, neckLen: 1.9, neckAngle: 1.2, neckR: 0.13, headLen: 0.5, headH: 0.2, snout: 0.18, headPitch: 0.9, ears: 'pointy', earSize: 0.1, horns: 'ossicones', tail: 'tuft', tailLen: 0.8, tailUp: -1.1, hooves: true, spots: 22, coat: 0xe8b860, accent: 0x7a4418 },
   rabbit: { plan: 'quadruped', bodyLen: 0.32, bodyH: 0.22, bodyW: 0.2, legLen: 0.08, neckLen: 0.04, neckAngle: 0.8, headLen: 0.14, headH: 0.12, snout: 0.03, ears: 'long', earSize: 0.15, tail: 'puff', tailLen: 0.05, coat: 0xd8c8b4, belly: 0xf5f0e8, nose: 0xe8a0a0 },
   mouse: { plan: 'quadruped', bodyLen: 0.1, bodyH: 0.05, bodyW: 0.05, legLen: 0.02, neckLen: 0.01, neckAngle: 0.5, headLen: 0.05, headH: 0.035, snout: 0.02, ears: 'round', earSize: 0.02, tail: 'thin', tailLen: 0.1, tailUp: 0, coat: 0x9a9088, nose: 0xe8a0a0 },
@@ -437,3 +437,37 @@ function makeArthropod(THREE, M, p, main) {
 }
 
 export const CREATURE_FACTORIES = { quadruped: makeQuadruped, bird: makeBird, fish: makeFish, serpent: makeSerpent, arthropod: makeArthropod };
+
+// Breeds: a species plus the look that makes the breed recognisable (coat colours, size, legs, ears, tail).
+// m = multipliers on the species' measurements; c = coat; everything a description states still wins.
+export const BREEDS = {
+  'golden retriever': { species: 'dog', c: { coat: 0xc8913e, belly: 0xe2bc80 }, m: { size: 1.05, tailLen: 1.25 } },
+  retriever: { species: 'dog', c: { coat: 0xc8913e, belly: 0xe2bc80 }, m: { tailLen: 1.25 } },
+  labrador: { species: 'dog', c: { coat: 0xd9b37a, belly: 0xe8cfa0 }, m: { size: 1.05 } },
+  poodle: { species: 'dog', c: { coat: 0xf2ead8, belly: 0xf6f0e4 }, m: { size: 0.8, legLen: 1.15, snout: 1.1 } },
+  husky: { species: 'dog', c: { coat: 0x6e7178, belly: 0xf0f0f0, eye: 0x6fa8dc }, set: { ears: 'pointy', tail: 'bushy', tailUp: 1.2 } },
+  'german shepherd': { species: 'dog', c: { coat: 0x3a2a1c, belly: 0xb5803f }, m: { size: 1.1 }, set: { ears: 'pointy', tail: 'bushy' } },
+  beagle: { species: 'dog', c: { coat: 0xb07a45, belly: 0xf2ece0, accent: 0x2a2018 }, m: { size: 0.7 }, set: { ears: 'floppy' } },
+  bulldog: { species: 'dog', c: { coat: 0xc9a27a, belly: 0xf0e4d4 }, m: { size: 0.65, legLen: 0.7, snout: 0.4, bodyW: 1.35, headH: 1.15 } },
+  corgi: { species: 'dog', c: { coat: 0xd08a3c, belly: 0xf6eee2 }, m: { size: 0.75, legLen: 0.5, bodyLen: 1.1 }, set: { ears: 'pointy' } },
+  dachshund: { species: 'dog', c: { coat: 0x7a3e1c, belly: 0x9a5a30 }, m: { size: 0.65, legLen: 0.45, bodyLen: 1.35 }, set: { ears: 'floppy' } },
+  chihuahua: { species: 'dog', c: { coat: 0xd8b080, belly: 0xeedcc0 }, m: { size: 0.35, earSize: 1.5, snout: 0.6 }, set: { ears: 'pointy' } },
+  dalmatian: { species: 'dog', c: { coat: 0xf2f0ea, belly: 0xf6f4ee, accent: 0x1a1a1a, spots: 10 }, m: { size: 1.05, legLen: 1.08 } },
+  pug: { species: 'dog', c: { coat: 0xd8c09a, belly: 0xe6d4b4 }, m: { size: 0.5, snout: 0.3, headH: 1.15 }, set: { tail: 'curl' } },
+  rottweiler: { species: 'dog', c: { coat: 0x1c1814, belly: 0x8a4a22 }, m: { size: 1.15, bodyW: 1.12 } },
+  doberman: { species: 'dog', c: { coat: 0x1c1814, belly: 0x8a4a22 }, m: { size: 1.12, legLen: 1.12 }, set: { ears: 'pointy' } },
+  greyhound: { species: 'dog', c: { coat: 0x9a948c, belly: 0xc8c2b8 }, m: { size: 1.05, bodyW: 0.72, legLen: 1.25, snout: 1.2 } },
+  terrier: { species: 'dog', c: { coat: 0xc8a070, belly: 0xe0c8a0 }, m: { size: 0.6 }, set: { ears: 'pointy' } },
+  'border collie': { species: 'dog', c: { coat: 0x1c1814, belly: 0xf2f0ea }, set: { tail: 'bushy' } },
+  collie: { species: 'dog', c: { coat: 0xb0702e, belly: 0xf2f0ea }, set: { tail: 'bushy' } },
+  shiba: { species: 'dog', c: { coat: 0xd27a3a, belly: 0xf2e6d2 }, m: { size: 0.7 }, set: { ears: 'pointy', tail: 'curl' } },
+  'great dane': { species: 'dog', c: { coat: 0x8a8278, belly: 0xa8a096 }, m: { size: 1.45, legLen: 1.15 } },
+  spaniel: { species: 'dog', c: { coat: 0x8a4a22, belly: 0xf2ece0 }, m: { size: 0.7, earSize: 1.4 }, set: { ears: 'floppy' } },
+  siamese: { species: 'cat', c: { coat: 0xe8dcc4, belly: 0xf2ead8, accent: 0x3a2a20, eye: 0x4a8fd8 } },
+  persian: { species: 'cat', c: { coat: 0xf0ece4, belly: 0xf6f2ec }, m: { snout: 0.5, bodyW: 1.2 }, set: { tail: 'bushy' } },
+  'maine coon': { species: 'cat', c: { coat: 0x8a6a4a, belly: 0xd8c8b0, accent: 0x3a2a1c, stripes: 9 }, m: { size: 1.35 }, set: { tail: 'bushy' } },
+  tabby: { species: 'cat', c: { coat: 0xa87a4a, belly: 0xe0c8a8, accent: 0x4a3420, stripes: 9 } },
+  clydesdale: { species: 'horse', c: { coat: 0x6a3a1c }, m: { size: 1.2, bodyW: 1.12 } },
+  mustang: { species: 'horse', c: { coat: 0x8a5a30 } },
+  arabian: { species: 'horse', c: { coat: 0xd8d0c4 }, m: { size: 0.95, legLen: 1.05 } },
+};

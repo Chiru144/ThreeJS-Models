@@ -146,13 +146,17 @@ function makeQuadruped(THREE, M, p, main) {
     c[0] = col.r * tone * c[0]; c[1] = col.g * tone * c[1]; c[2] = col.b * tone * c[2];
   };
   const furry = !p.scaly;
-  const COAT = main || M(`q_coat_${p.scaly ? 'scale' : p.woolly ? 'wool' : 'fur'}`, furry
+  // hairless hide (elephant, pig): matte wrinkled skin; fur gets a soft sheen; scales a light clearcoat
+  const COAT = main || M(`q_coat_${p.scaly ? 'scale' : p.hide ? 'hide' : p.woolly ? 'wool' : 'fur'}`, p.hide && !p.scaly
+    ? { color: 0xffffff, roughness: 0.9, vertexColors: true }
+    : furry
     ? { color: 0xffffff, roughness: p.woolly ? 1 : 0.85, sheen: 1, sheenRoughness: 0.55, sheenColor: 0x9a9a9a, vertexColors: true }
     : { color: 0xffffff, roughness: 0.42, clearcoat: 0.35, clearcoatRoughness: 0.45, vertexColors: true }, 'MeshPhysicalMaterial');
   coat.push(PL([0, -1, 0], [0, 0, 0])); // feet end at the ground
   const cellC = Math.max(L, BH * 2) * 0.0125;
   const coatMesh = make(coat, cellC, COAT, { paint, paintKey: JSON.stringify([p.coat, p.belly, p.accent, p.stripes, p.spots, p.headColor, p.variant ?? 0, p.vary]) });
   if (p.scaly) detailize(COAT, 'scales', 26 / BH, 1.4);
+  else if (p.hide) detailize(COAT, 'leather', 70 / BH, 0.55); // creased skin
   if (p.fur && coatMesh && !main) furShells(root, coatMesh, p.fur);
 
   // --- keratin: hooves, horns, tusks, claws, nose leather ---
